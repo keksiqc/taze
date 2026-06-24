@@ -4,7 +4,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from packaging.requirements import Requirement, InvalidRequirement
+from packaging.requirements import InvalidRequirement, Requirement
 
 from .models import DepInfo, FileKind
 

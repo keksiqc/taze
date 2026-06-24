@@ -4,7 +4,7 @@ import json
 import urllib.request
 from urllib.error import URLError
 
-from packaging.version import Version, InvalidVersion
+from packaging.version import InvalidVersion, Version
 
 _USER_AGENT = "taze/0.1.0 (https://github.com/keksi/taze)"
 

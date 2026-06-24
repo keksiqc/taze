@@ -3,13 +3,13 @@ from __future__ import annotations
 import json as _json
 from datetime import date
 
+from rich import box
 from rich.console import Console
 from rich.padding import Padding
-from rich import box
 from rich.table import Table
 from rich.text import Text
 
-from .models import DepInfo, BUMP_COLOR, BUMP_BADGE
+from .models import BUMP_BADGE, BUMP_COLOR, DepInfo
 
 console = Console()
 

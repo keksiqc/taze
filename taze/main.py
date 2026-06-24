@@ -4,12 +4,12 @@ import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
 from .display import console, interactive_select, render_group, render_json
-from .models import DepInfo, FileKind, MODES, MODE_SETTINGS, calc_bump
+from .models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
 from .parsers import (
     build_name_filter,
     parse_dep_string,
@@ -109,7 +109,7 @@ def main(
         ),
     ] = "default",
     cwd: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--cwd", "-C", help="Working directory", show_default=False),
     ] = None,
     write: Annotated[
@@ -144,7 +144,7 @@ def main(
         ),
     ] = False,
     include: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--include",
             "-n",
@@ -152,7 +152,7 @@ def main(
         ),
     ] = None,
     exclude: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--exclude",
             "-x",
@@ -167,7 +167,7 @@ def main(
         typer.Option("--group", help="Group dependencies by source file on display"),
     ] = False,
     sort: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"
         ),
@@ -462,7 +462,7 @@ def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -
 class _nullctx:
     """No-op context manager (replaces console.status when --silent)."""
 
-    def __enter__(self) -> "_nullctx":
+    def __enter__(self) -> _nullctx:
         return self
 
     def __exit__(self, *_: object) -> None:

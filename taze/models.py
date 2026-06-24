@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from packaging.requirements import Requirement
-from packaging.version import Version, InvalidVersion
+from packaging.version import InvalidVersion, Version
 
 BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?": -1}
 
@@ -73,7 +73,7 @@ MODE_SHOWS_MINOR: dict[str, bool] = {
 }
 
 
-class FileKind(str, Enum):
+class FileKind(StrEnum):
     PYPROJECT = "pyproject"
     REQUIREMENTS = "requirements"
 
