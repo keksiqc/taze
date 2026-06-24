@@ -35,7 +35,7 @@ pip install taze
 
 ## Usage
 
-```
+```text
 taze [mode] [options]
 ```
 
@@ -91,7 +91,7 @@ taze --json
 
 ### Options
 
-```
+```text
   -w, --write              Write updates back to file
   -i, --install            Run uv sync after writing (implies -w)
   -u, --update             Alias for --install
@@ -112,7 +112,7 @@ taze --json
 
 ## Output
 
-```
+```text
   📦  pyproject.toml  /home/user/myproject/pyproject.toml
 
   dependencies  3 outdated
