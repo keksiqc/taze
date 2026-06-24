@@ -72,11 +72,20 @@ def render_group(
         header.append("  all up to date", style="dim green")
     console.print(header)
 
-    name_width        = max(max((len(i.name)                       for i in visible), default=0), col_widths[0])
-    spec_width        = max(max((len(i.current_spec)               for i in visible), default=0), col_widths[1])
-    cur_age_width     = max(max((len(_age(i.current_release_date)) for i in visible), default=0), col_widths[2])
-    lat_age_width     = max(max((len(_age(i.release_date))         for i in visible), default=0), col_widths[3])
-    latest_spec_width = max(max((len(i.latest_spec)                for i in visible), default=0), col_widths[4])
+    name_width = max(max((len(i.name) for i in visible), default=0), col_widths[0])
+    spec_width = max(
+        max((len(i.current_spec) for i in visible), default=0), col_widths[1]
+    )
+    cur_age_width = max(
+        max((len(_age(i.current_release_date)) for i in visible), default=0),
+        col_widths[2],
+    )
+    lat_age_width = max(
+        max((len(_age(i.release_date)) for i in visible), default=0), col_widths[3]
+    )
+    latest_spec_width = max(
+        max((len(i.latest_spec) for i in visible), default=0), col_widths[4]
+    )
 
     table = Table(
         box=box.SIMPLE,
@@ -103,10 +112,13 @@ def render_group(
 
         if info.fetch_error:
             table.add_row(
-                info.name, "", info.current_spec,
+                info.name,
+                "",
+                info.current_spec,
                 Text("→", style="dim"),
                 Text("fetch failed", style="dim red"),
-                "", "",
+                "",
+                "",
             )
         elif info.bump == "same":
             table.add_row(
@@ -115,7 +127,8 @@ def render_group(
                 Text(info.current_spec, style="dim"),
                 Text("·", style="dim"),
                 Text(info.current_spec, style="dim"),
-                "", "",
+                "",
+                "",
             )
         else:
             table.add_row(
@@ -191,7 +204,7 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
 
     try:
         raw = input().strip()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         console.print()
         return []
 

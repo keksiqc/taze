@@ -49,7 +49,7 @@ def write_requirements_updates(path: Path, infos: list[DepInfo]) -> int:
         # Preserve trailing comment and line ending
         tail = re.search(r"(\s+#.*)$", old_line.rstrip("\n\r"))
         comment = tail.group(1) if tail else ""
-        ending = old_line[len(old_line.rstrip("\n\r")):]
+        ending = old_line[len(old_line.rstrip("\n\r")) :]
         lines[idx] = new_raw + comment + ending
         count += 1
 

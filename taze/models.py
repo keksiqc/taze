@@ -28,13 +28,13 @@ BUMP_BADGE: dict[str, str] = {
 # min_bump_level: only show updates at this level or above
 MODE_SETTINGS: dict[str, tuple[str, bool]] = {
     "default": ("patch", False),
-    "major":   ("patch", False),
-    "latest":  ("patch", False),
-    "stable":  ("patch", False),
-    "minor":   ("patch", False),   # filter applied post-fetch
-    "patch":   ("patch", False),   # filter applied post-fetch
-    "newest":  ("patch", True),
-    "next":    ("patch", True),
+    "major": ("patch", False),
+    "latest": ("patch", False),
+    "stable": ("patch", False),
+    "minor": ("patch", False),  # filter applied post-fetch
+    "patch": ("patch", False),  # filter applied post-fetch
+    "newest": ("patch", True),
+    "next": ("patch", True),
 }
 
 MODES = list(MODE_SETTINGS)
@@ -42,24 +42,34 @@ MODES = list(MODE_SETTINGS)
 # Which bump levels each mode actually shows
 MODE_MIN_BUMP: dict[str, str] = {
     "default": "patch",
-    "major":   "patch",
-    "latest":  "patch",
-    "stable":  "patch",
-    "newest":  "patch",
-    "next":    "patch",
-    "minor":   "patch",   # no major bumps
-    "patch":   "patch",   # no minor or major bumps
+    "major": "patch",
+    "latest": "patch",
+    "stable": "patch",
+    "newest": "patch",
+    "next": "patch",
+    "minor": "patch",  # no major bumps
+    "patch": "patch",  # no minor or major bumps
 }
 
 MODE_SHOWS_MAJOR: dict[str, bool] = {
-    "major": True, "default": True, "latest": True,
-    "stable": True, "newest": True, "next": True,
-    "minor": False, "patch": False,
+    "major": True,
+    "default": True,
+    "latest": True,
+    "stable": True,
+    "newest": True,
+    "next": True,
+    "minor": False,
+    "patch": False,
 }
 MODE_SHOWS_MINOR: dict[str, bool] = {
-    "major": True, "default": True, "latest": True,
-    "stable": True, "newest": True, "next": True,
-    "minor": True, "patch": False,
+    "major": True,
+    "default": True,
+    "latest": True,
+    "stable": True,
+    "newest": True,
+    "next": True,
+    "minor": True,
+    "patch": False,
 }
 
 
@@ -106,7 +116,7 @@ class DepInfo:
     file_kind: FileKind = FileKind.PYPROJECT
     line_number: int | None = None
     latest: str | None = None
-    release_date: str | None = None          # ISO date of latest release
+    release_date: str | None = None  # ISO date of latest release
     current_release_date: str | None = None  # ISO date of the current pinned release
     bump: str = "?"
     fetch_error: bool = False

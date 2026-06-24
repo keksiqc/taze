@@ -24,7 +24,7 @@ def fetch_pypi_info(
         req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-    except (URLError, OSError, ValueError):
+    except URLError, OSError, ValueError:
         return None, None, None
 
     info_version: str = data.get("info", {}).get("version", "")

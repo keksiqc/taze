@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import subprocess
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Annotated, Optional
@@ -10,8 +9,13 @@ from typing import Annotated, Optional
 import typer
 
 from .display import console, interactive_select, render_group, render_json
-from .models import DepInfo, FileKind, MODES, MODE_SETTINGS, calc_bump, bump_allowed
-from .parsers import build_name_filter, parse_dep_string, parse_pyproject, parse_requirements_file
+from .models import DepInfo, FileKind, MODES, MODE_SETTINGS, calc_bump
+from .parsers import (
+    build_name_filter,
+    parse_dep_string,
+    parse_pyproject,
+    parse_requirements_file,
+)
 from .pypi import fetch_pypi_info
 from .writers import write_pyproject_updates, write_requirements_updates
 
@@ -41,7 +45,9 @@ def resolve_deps(
 ) -> list[DepInfo]:
     infos: list[DepInfo] = []
     for raw, src, kind, lineno in entries:
-        info = parse_dep_string(raw, source_file=src, file_kind=kind, line_number=lineno)
+        info = parse_dep_string(
+            raw, source_file=src, file_kind=kind, line_number=lineno
+        )
         if info is None:
             continue
         if include_pat and not include_pat.match(info.name):
@@ -106,10 +112,16 @@ def main(
         Optional[Path],
         typer.Option("--cwd", "-C", help="Working directory", show_default=False),
     ] = None,
-    write: Annotated[bool, typer.Option("--write", "-w", help="Write updates back to file")] = False,
+    write: Annotated[
+        bool, typer.Option("--write", "-w", help="Write updates back to file")
+    ] = False,
     install: Annotated[
         bool,
-        typer.Option("--install", "-i", help="Install directly after bumping (implies [cyan]-w[/])"),
+        typer.Option(
+            "--install",
+            "-i",
+            help="Install directly after bumping (implies [cyan]-w[/])",
+        ),
     ] = False,
     update: Annotated[
         bool,
@@ -117,33 +129,64 @@ def main(
     ] = False,
     recursive: Annotated[
         bool,
-        typer.Option("--recursive", "-r", help="Recursively search for pyproject.toml / requirements*.txt"),
+        typer.Option(
+            "--recursive",
+            "-r",
+            help="Recursively search for pyproject.toml / requirements*.txt",
+        ),
     ] = False,
     interactive: Annotated[
         bool,
-        typer.Option("--interactive", "-I", help="Interactive mode — choose which packages to update"),
+        typer.Option(
+            "--interactive",
+            "-I",
+            help="Interactive mode — choose which packages to update",
+        ),
     ] = False,
     include: Annotated[
         Optional[str],
-        typer.Option("--include", "-n", help="Only check these deps (comma-separated names or [dim]/regex/[/])"),
+        typer.Option(
+            "--include",
+            "-n",
+            help="Only check these deps (comma-separated names or [dim]/regex/[/])",
+        ),
     ] = None,
     exclude: Annotated[
         Optional[str],
-        typer.Option("--exclude", "-x", help="Skip these deps (comma-separated names or [dim]/regex/[/])"),
+        typer.Option(
+            "--exclude",
+            "-x",
+            help="Skip these deps (comma-separated names or [dim]/regex/[/])",
+        ),
     ] = None,
-    all_deps: Annotated[bool, typer.Option("--all", "-a", help="Show up-to-date packages too")] = False,
-    group: Annotated[bool, typer.Option("--group", help="Group dependencies by source file on display")] = False,
+    all_deps: Annotated[
+        bool, typer.Option("--all", "-a", help="Show up-to-date packages too")
+    ] = False,
+    group: Annotated[
+        bool,
+        typer.Option("--group", help="Group dependencies by source file on display"),
+    ] = False,
     sort: Annotated[
         Optional[str],
-        typer.Option("--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"),
+        typer.Option(
+            "--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"
+        ),
     ] = None,
     fail_on_outdated: Annotated[
         bool,
-        typer.Option("--fail-on-outdated", help="Exit with code 1 if outdated dependencies are found"),
+        typer.Option(
+            "--fail-on-outdated",
+            help="Exit with code 1 if outdated dependencies are found",
+        ),
     ] = False,
     silent: Annotated[bool, typer.Option("--silent", "-s", help="No output")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)] = False,
-    version: Annotated[bool, typer.Option("--version", "-v", help="Show version and exit", is_eager=True)] = False,
+    output_json: Annotated[
+        bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)
+    ] = False,
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-v", help="Show version and exit", is_eager=True),
+    ] = False,
     concurrency: Annotated[
         int,
         typer.Option("--concurrency", help="Number of concurrent PyPI requests"),
@@ -172,8 +215,7 @@ def main(
 
     if mode not in MODES:
         console.print(
-            f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. "
-            f"Available: {' | '.join(MODES)}"
+            f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}"
         )
         raise typer.Exit(1)
 
@@ -206,12 +248,16 @@ def main(
 
     if not target_files:
         if not silent:
-            console.print(f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}")
+            console.print(
+                f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}"
+            )
         raise typer.Exit(1)
 
     # ── Build entries per file ────────────────────────────────────────────────
     # file_path → group_label → raw entries
-    raw_file_groups: dict[Path, dict[str, list[tuple[str, Path, FileKind, int | None]]]] = {}
+    raw_file_groups: dict[
+        Path, dict[str, list[tuple[str, Path | None, FileKind, int | None]]]
+    ] = {}
 
     for file_path in target_files:
         if file_path.name == "pyproject.toml":
@@ -251,7 +297,7 @@ def main(
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
     status_msg = f"[dim]Checking {total_packages} package(s) on PyPI…[/]"
-    with (console.status(status_msg, spinner="dots") if not silent else _nullctx()):
+    with console.status(status_msg, spinner="dots") if not silent else _nullctx():
         for file_path, groups in raw_file_groups.items():
             resolved[file_path] = {}
             for label, entries in groups.items():
@@ -274,7 +320,6 @@ def main(
         console.print()
 
     total_outdated = 0
-    printed_any = False
 
     for file_path, groups in resolved.items():
         file_outdated = _count_outdated({file_path: groups}, mode)
@@ -285,12 +330,13 @@ def main(
             # group aligns to the same grid.
             all_infos = [i for infos in groups.values() for i in infos]
             from .display import _age
+
             col_widths = (
-                max((len(i.name)                       for i in all_infos), default=0),
-                max((len(i.current_spec)               for i in all_infos), default=0),
+                max((len(i.name) for i in all_infos), default=0),
+                max((len(i.current_spec) for i in all_infos), default=0),
                 max((len(_age(i.current_release_date)) for i in all_infos), default=0),
-                max((len(_age(i.release_date))         for i in all_infos), default=0),
-                max((len(i.latest_spec)                for i in all_infos), default=0),
+                max((len(_age(i.release_date)) for i in all_infos), default=0),
+                max((len(i.latest_spec) for i in all_infos), default=0),
             )
 
             console.print(
@@ -308,7 +354,6 @@ def main(
                     col_widths=col_widths,
                 ):
                     console.print()
-                    printed_any = True
 
             if file_outdated == 0:
                 console.print("  [green]✓  All dependencies are up to date![/]")
@@ -371,7 +416,7 @@ def main(
         console.print("  [dim]Run [cyan]uv sync[/] now? [bold](y/N)[/] [/]", end="")
         try:
             answer = input().strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             answer = ""
             console.print()
         if answer == "y":
@@ -416,6 +461,7 @@ def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -
 
 class _nullctx:
     """No-op context manager (replaces console.status when --silent)."""
+
     def __enter__(self) -> "_nullctx":
         return self
 
