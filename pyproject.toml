@@ -26,4 +26,4 @@ build-backend = "hatchling.build"
 packages = ["taze"]
 
 [tool.ruff.lint]
-extend-select = ["RUF","I", "UP", "E", "F"]
+extend-select = ["RUF", "I", "UP", "E", "F"]
