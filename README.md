@@ -41,16 +41,16 @@ taze [mode] [options]
 
 ### Modes
 
-| Mode      | What it shows                          |
-|-----------|----------------------------------------|
-| `default` | All stable updates (default)           |
-| `major`   | Same as default                        |
-| `minor`   | Minor and patch updates only           |
-| `patch`   | Patch updates only                     |
-| `latest`  | All stable updates                     |
-| `stable`  | All stable updates                     |
-| `newest`  | All updates including pre-releases     |
-| `next`    | Same as newest                         |
+| Mode      | What it shows                      |
+| --------- | ---------------------------------- |
+| `default` | All stable updates (default)       |
+| `major`   | Same as default                    |
+| `minor`   | Minor and patch updates only       |
+| `patch`   | Patch updates only                 |
+| `latest`  | All stable updates                 |
+| `stable`  | All stable updates                 |
+| `newest`  | All updates including pre-releases |
+| `next`    | Same as newest                     |
 
 ### Examples
 
@@ -132,13 +132,13 @@ The age columns show how old the **current** pinned version is and how recently 
 
 ## Supported file formats
 
-| File                    | Section                            |
-|-------------------------|------------------------------------|
-| `pyproject.toml`        | `[project] dependencies`           |
-| `pyproject.toml`        | `[project.optional-dependencies.*]`|
-| `pyproject.toml`        | `[dependency-groups.*]` (PEP 735)  |
-| `pyproject.toml`        | `[tool.uv.dev-dependencies]`       |
-| `requirements*.txt`     | Standard pip format                |
+| File                | Section                             |
+| ------------------- | ----------------------------------- |
+| `pyproject.toml`    | `[project] dependencies`            |
+| `pyproject.toml`    | `[project.optional-dependencies.*]` |
+| `pyproject.toml`    | `[dependency-groups.*]` (PEP 735)   |
+| `pyproject.toml`    | `[tool.uv.dev-dependencies]`        |
+| `requirements*.txt` | Standard pip format                 |
 
 ---
 
