@@ -1,26 +1,21 @@
 from __future__ import annotations
 
-import json
 import re
 import subprocess
-import tomllib
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-import urllib.error
-import urllib.request
+from typing import Annotated, Optional
 
 import typer
-from packaging.requirements import Requirement, InvalidRequirement
-from packaging.version import Version, InvalidVersion
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
-from rich import box
-from rich.padding import Padding
 
-# ─── App setup ────────────────────────────────────────────────────────────────
+from .display import console, interactive_select, render_group, render_json
+from .models import DepInfo, FileKind, MODES, MODE_SETTINGS, calc_bump, bump_allowed
+from .parsers import build_name_filter, parse_dep_string, parse_pyproject, parse_requirements_file
+from .pypi import fetch_pypi_info
+from .writers import write_pyproject_updates, write_requirements_updates
+
+__version__ = "0.1.0"
 
 app = typer.Typer(
     name="taze",
@@ -30,250 +25,47 @@ app = typer.Typer(
     no_args_is_help=False,
 )
 
-console = Console()
-
-# ─── Data types ───────────────────────────────────────────────────────────────
-
-BUMP_COLOR = {
-    "major": "red",
-    "minor": "yellow",
-    "patch": "green",
-    "same": "dim",
-    "?": "dim",
-}
-BUMP_BADGE = {
-    "major": "[bold red]MAJOR[/]",
-    "minor": "[yellow]minor[/]",
-    "patch": "[green]patch[/]",
-    "same": "[dim]up to date[/]",
-    "?": "[dim]?[/]",
-}
+SORT_CHOICES = ("name-asc", "name-desc", "diff-asc", "diff-desc")
 
 
-@dataclass
-class DepInfo:
-    raw: str  # original dep string as it appears in TOML (without quotes)
-    name: str  # normalised package name
-    current: str | None  # version from the constraint (e.g. "2.28.0")
-    operator: str | None  # e.g. ">=", "==", "~="
-    latest: str | None = None
-    bump: str = "?"
-    fetch_error: bool = False
-
-    # ── Display helpers ───────────────────────────────────────────────────────
-
-    @property
-    def current_spec(self) -> str:
-        if self.operator and self.current:
-            return f"{self.operator}{self.current}"
-        return "(any)"
-
-    @property
-    def latest_spec(self) -> str:
-        if not self.latest:
-            return "—"
-        if self.operator:
-            if self.operator == "~=":
-                # keep same number of version components
-                n = len(self.current.split(".")) if self.current else 2
-                parts = self.latest.split(".")[:n]
-                return f"~={'.'.join(parts)}"
-            return f"{self.operator}{self.latest}"
-        return self.latest
-
-    @property
-    def is_outdated(self) -> bool:
-        return self.bump not in ("same", "?") and not self.fetch_error
-
-    # ── Build the updated dep string for writing back ─────────────────────────
-
-    def updated_raw(self) -> str:
-        if not self.latest or not self.operator:
-            return self.raw
-        try:
-            req = Requirement(self.raw)
-        except Exception:
-            return self.raw
-
-        new_specs: list[str] = []
-        for spec in req.specifier:
-            if spec.operator in (">=", "==", ">"):
-                new_specs.append(f"{spec.operator}{self.latest}")
-            elif spec.operator == "~=":
-                n = len(spec.version.split("."))
-                parts = self.latest.split(".")[:n]
-                new_specs.append(f"~={'.'.join(parts)}")
-            else:
-                # keep upper-bound constraints (<, <=, !=) as-is
-                new_specs.append(str(spec))
-
-        extras = f"[{','.join(sorted(req.extras))}]" if req.extras else ""
-        return f"{req.name}{extras}{','.join(new_specs)}"
+# ─── Resolution ───────────────────────────────────────────────────────────────
 
 
-# ─── PyPI fetching ────────────────────────────────────────────────────────────
-
-
-def fetch_pypi_latest(package: str) -> str | None:
-    """Return the latest stable version string for a package from PyPI."""
-    try:
-        url = f"https://pypi.org/pypi/{package}/json"
-        request = urllib.request.Request(
-            url, headers={"User-Agent": "taze/0.1.0 (https://github.com/your/taze)"}
-        )
-        with urllib.request.urlopen(request, timeout=10) as resp:
-            data = json.loads(resp.read())
-
-        # info.version is already the latest stable on PyPI
-        candidate = data.get("info", {}).get("version", "")
-        try:
-            v = Version(candidate)
-            if not v.is_prerelease and not v.is_devrelease:
-                return str(v)
-        except InvalidVersion:
-            pass
-
-        # Fallback: scan all release keys
-        best: Version | None = None
-        for v_str, files in data.get("releases", {}).items():
-            if not files:  # yanked / no files
-                continue
-            try:
-                v = Version(v_str)
-            except InvalidVersion:
-                continue
-            if v.is_prerelease or v.is_devrelease:
-                continue
-            if best is None or v > best:
-                best = v
-        return str(best) if best else None
-
-    except Exception:
-        return None
-
-
-# ─── Parsing ─────────────────────────────────────────────────────────────────
-
-
-def parse_dep_string(raw: str) -> DepInfo | None:
-    """Parse one PEP 508 dependency string into a DepInfo."""
-    raw = raw.strip()
-    if not raw:
-        return None
-    try:
-        req = Requirement(raw)
-    except InvalidRequirement, Exception:
-        return None
-
-    name = req.name.lower().replace("_", "-")
-    specs = list(req.specifier)
-    current: str | None = None
-    operator: str | None = None
-
-    # Prefer the most meaningful lower-bound operator
-    for op in ("==", ">=", "~=", ">"):
-        for spec in specs:
-            if spec.operator == op:
-                current = spec.version
-                operator = op
-                break
-        if current:
-            break
-
-    return DepInfo(raw=raw, name=name, current=current, operator=operator)
-
-
-def parse_pyproject(path: Path) -> dict[str, list[str]]:
-    """
-    Return ordered dict: group_label → list of raw dep strings.
-
-    Covers:
-      • [project] dependencies
-      • [project.optional-dependencies.*]
-      • [dependency-groups.*]          (PEP 735, uv native)
-      • [tool.uv.dev-dependencies]     (legacy uv format)
-    """
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
-
-    groups: dict[str, list[str]] = {}
-
-    project_deps: list = data.get("project", {}).get("dependencies", [])
-    if project_deps:
-        groups["dependencies"] = [d for d in project_deps if isinstance(d, str)]
-
-    for grp, dep_list in (
-        data.get("project", {}).get("optional-dependencies", {}).items()
-    ):
-        groups[f"optional:{grp}"] = [d for d in dep_list if isinstance(d, str)]
-
-    for grp, dep_list in data.get("dependency-groups", {}).items():
-        str_deps = [d for d in dep_list if isinstance(d, str)]
-        if str_deps:
-            groups[f"group:{grp}"] = str_deps
-
-    uv_dev: list = data.get("tool", {}).get("uv", {}).get("dev-dependencies", [])
-    if uv_dev:
-        groups["dev-dependencies"] = [d for d in uv_dev if isinstance(d, str)]
-
-    return groups
-
-
-# ─── Version comparison ───────────────────────────────────────────────────────
-
-
-def calc_bump(current: str | None, latest: str | None) -> str:
-    if not current or not latest:
-        return "?"
-    try:
-        c = Version(current)
-        l = Version(latest)
-        if l <= c:
-            return "same"
-        if l.major > c.major:
-            return "major"
-        if l.minor > c.minor:
-            return "minor"
-        return "patch"
-    except InvalidVersion:
-        return "?"
-
-
-# ─── Core resolution ──────────────────────────────────────────────────────────
-
-
-def resolve_group(
-    dep_strings: list[str],
-    include_filter: set[str] | None,
-    exclude_filter: set[str],
-    workers: int = 10,
+def resolve_deps(
+    entries: list[tuple[str, Path | None, FileKind, int | None]],
+    *,
+    include_pat: re.Pattern[str] | None,
+    exclude_pat: re.Pattern[str] | None,
+    pre: bool,
+    concurrency: int,
 ) -> list[DepInfo]:
-    """Parse + fetch latest for every dep in a group, concurrently."""
     infos: list[DepInfo] = []
-
-    for raw in dep_strings:
-        info = parse_dep_string(raw)
+    for raw, src, kind, lineno in entries:
+        info = parse_dep_string(raw, source_file=src, file_kind=kind, line_number=lineno)
         if info is None:
             continue
-        if include_filter is not None and info.name not in include_filter:
+        if include_pat and not include_pat.match(info.name):
             continue
-        if info.name in exclude_filter:
+        if exclude_pat and exclude_pat.match(info.name):
             continue
         infos.append(info)
 
     if not infos:
         return infos
 
-    # Concurrent PyPI fetches
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_info = {
-            pool.submit(fetch_pypi_latest, info.name): info for info in infos
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = {
+            pool.submit(fetch_pypi_info, i.name, pre=pre, current_version=i.current): i
+            for i in infos
         }
-        for future in as_completed(future_to_info):
-            info = future_to_info[future]
+        for fut in as_completed(futures):
+            info = futures[fut]
             try:
-                info.latest = future.result()
-                info.fetch_error = info.latest is None
+                version, latest_date, current_date = fut.result()
+                info.latest = version
+                info.release_date = latest_date
+                info.current_release_date = current_date
+                info.fetch_error = version is None
             except Exception:
                 info.fetch_error = True
             info.bump = calc_bump(info.current, info.latest)
@@ -281,272 +73,357 @@ def resolve_group(
     return infos
 
 
-# ─── Display ─────────────────────────────────────────────────────────────────
+# ─── File discovery ───────────────────────────────────────────────────────────
 
 
-def render_group(label: str, infos: list[DepInfo], show_up_to_date: bool) -> bool:
-    """Render one dep group table. Returns True if anything was printed."""
-    visible = [i for i in infos if show_up_to_date or i.is_outdated or i.fetch_error]
-    if not visible:
-        return False
-
-    outdated_count = sum(1 for i in infos if i.is_outdated)
-    total = len(infos)
-
-    # Group header
-    label_text = Text()
-    label_text.append(f"  {label}", style="bold")
-    if outdated_count:
-        label_text.append(f"  {outdated_count} outdated", style="dim")
-    else:
-        label_text.append("  all up to date", style="dim green")
-    console.print(label_text)
-
-    table = Table(
-        box=box.SIMPLE,
-        show_header=False,
-        padding=(0, 1),
-        expand=False,
-        show_edge=False,
-    )
-    table.add_column("name", style="bold", no_wrap=True, min_width=22)
-    table.add_column("current", style="dim", no_wrap=True, min_width=14)
-    table.add_column("arrow", no_wrap=True, min_width=3)
-    table.add_column("latest", no_wrap=True, min_width=14)
-    table.add_column("badge", no_wrap=True)
-
-    for info in visible:
-        color = BUMP_COLOR.get(info.bump, "dim")
-        badge = BUMP_BADGE.get(info.bump, "")
-
-        if info.fetch_error:
-            table.add_row(
-                info.name,
-                info.current_spec,
-                Text("→", style="dim"),
-                Text("fetch failed", style="dim red"),
-                "",
-            )
-        elif info.bump == "same":
-            table.add_row(
-                Text(info.name, style="dim"),
-                Text(info.current_spec, style="dim"),
-                Text("·", style="dim"),
-                Text(info.current_spec, style="dim"),
-                "",
-            )
-        else:
-            table.add_row(
-                info.name,
-                Text(info.current_spec, style="dim"),
-                Text("→", style=color),
-                Text(info.latest_spec, style=f"bold {color}"),
-                Text.from_markup(badge),
-            )
-
-    console.print(Padding(table, (0, 0, 0, 2)))
-    return True
+def discover_files(root: Path) -> list[Path]:
+    found: list[Path] = []
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        found.append(pyproject)
+    for req in sorted(root.glob("requirements*.txt")):
+        found.append(req)
+    return found
 
 
-# ─── TOML writer ─────────────────────────────────────────────────────────────
-
-
-def write_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> int:
-    """Replace outdated dep strings in pyproject.toml. Returns number of updates."""
-    content = path.read_text(encoding="utf-8")
-    count = 0
-
-    for _label, infos in all_infos.items():
-        for info in infos:
-            if not info.is_outdated:
-                continue
-            new_raw = info.updated_raw()
-            if new_raw == info.raw:
-                continue
-            # Match the quoted dep string in TOML
-            old_quoted = re.escape(f'"{info.raw}"')
-            new_quoted = f'"{new_raw}"'
-            new_content = re.sub(old_quoted, new_quoted, content)
-            if new_content != content:
-                content = new_content
-                count += 1
-
-    path.write_text(content, encoding="utf-8")
-    return count
-
-
-# ─── CLI entry point ──────────────────────────────────────────────────────────
+# ─── CLI ──────────────────────────────────────────────────────────────────────
 
 
 @app.command()
 def main(
-    path: Path = typer.Argument(
-        Path("."),
-        help="Project directory or path to pyproject.toml",
-        show_default=False,
-    ),
-    write: bool = typer.Option(
-        False,
-        "-w",
-        "--write",
-        help="Write updates back to pyproject.toml",
-    ),
-    install: bool = typer.Option(
-        False,
-        "-i",
-        "--install",
-        help="Run [cyan]uv sync[/] after writing (implies [cyan]--write[/])",
-        rich_help_panel="Actions",
-    ),
-    group: Optional[str] = typer.Option(
-        None,
-        "-g",
-        "--group",
-        help="Only check a specific group (e.g. [cyan]dev[/], [cyan]optional:lint[/])",
-    ),
-    include: Optional[str] = typer.Option(
-        None,
-        "--include",
-        help="Comma-separated package names (or /regex/) to include",
-    ),
-    exclude: Optional[str] = typer.Option(
-        None,
-        "--exclude",
-        help="Comma-separated package names (or /regex/) to exclude",
-    ),
-    all_deps: bool = typer.Option(
-        False,
-        "-a",
-        "--all",
-        help="Show up-to-date packages too",
-    ),
-    workers: int = typer.Option(
-        12,
-        "--workers",
-        help="Concurrent PyPI fetch workers",
-        hidden=True,
-    ),
+    mode: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Update mode: "
+                "[green]patch[/] [yellow]minor[/] [red]major[/] "
+                "[dim]default | latest | stable | newest | next[/]"
+            ),
+            show_default=False,
+        ),
+    ] = "default",
+    cwd: Annotated[
+        Optional[Path],
+        typer.Option("--cwd", "-C", help="Working directory", show_default=False),
+    ] = None,
+    write: Annotated[bool, typer.Option("--write", "-w", help="Write updates back to file")] = False,
+    install: Annotated[
+        bool,
+        typer.Option("--install", "-i", help="Install directly after bumping (implies [cyan]-w[/])"),
+    ] = False,
+    update: Annotated[
+        bool,
+        typer.Option("--update", "-u", help="Alias for [cyan]--install[/]"),
+    ] = False,
+    recursive: Annotated[
+        bool,
+        typer.Option("--recursive", "-r", help="Recursively search for pyproject.toml / requirements*.txt"),
+    ] = False,
+    interactive: Annotated[
+        bool,
+        typer.Option("--interactive", "-I", help="Interactive mode — choose which packages to update"),
+    ] = False,
+    include: Annotated[
+        Optional[str],
+        typer.Option("--include", "-n", help="Only check these deps (comma-separated names or [dim]/regex/[/])"),
+    ] = None,
+    exclude: Annotated[
+        Optional[str],
+        typer.Option("--exclude", "-x", help="Skip these deps (comma-separated names or [dim]/regex/[/])"),
+    ] = None,
+    all_deps: Annotated[bool, typer.Option("--all", "-a", help="Show up-to-date packages too")] = False,
+    group: Annotated[bool, typer.Option("--group", help="Group dependencies by source file on display")] = False,
+    sort: Annotated[
+        Optional[str],
+        typer.Option("--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"),
+    ] = None,
+    fail_on_outdated: Annotated[
+        bool,
+        typer.Option("--fail-on-outdated", help="Exit with code 1 if outdated dependencies are found"),
+    ] = False,
+    silent: Annotated[bool, typer.Option("--silent", "-s", help="No output")] = False,
+    output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)] = False,
+    version: Annotated[bool, typer.Option("--version", "-v", help="Show version and exit", is_eager=True)] = False,
+    concurrency: Annotated[
+        int,
+        typer.Option("--concurrency", help="Number of concurrent PyPI requests"),
+    ] = 10,
 ) -> None:
     """
     🥬  [bold]taze[/bold] — keep your Python deps fresh
 
-    Reads [cyan]pyproject.toml[/], checks PyPI for newer versions, and shows
-    a grouped diff. Pass [cyan]-w[/] to write the bumped versions back, and
-    [cyan]-i[/] to also run [cyan]uv sync[/].
+    Reads [cyan]pyproject.toml[/] and/or [cyan]requirements*.txt[/], checks PyPI for
+    newer versions, and shows a grouped diff.
 
     [dim]Examples:[/dim]
-      [cyan]taze[/]                    # check everything
-      [cyan]taze -w[/]                 # check and write updates
-      [cyan]taze -w -i[/]              # write + uv sync
-      [cyan]taze -g dev[/]             # only group:dev
-      [cyan]taze --exclude pytest[/]   # skip pytest
+      [cyan]taze[/]                       check everything (default mode)
+      [cyan]taze minor[/]                 only show minor and patch updates
+      [cyan]taze patch -w[/]              write patch updates back to file
+      [cyan]taze newest -I[/]             interactive, including pre-releases
+      [cyan]taze -r[/]                    scan subdirectories recursively
+      [cyan]taze -x pytest,ruff[/]        skip specific packages
+      [cyan]taze -n /^boto/[/]            only packages matching regex
+
+      [cyan]taze --sort diff-desc[/]      biggest updates first
     """
-    if install:
+    if version:
+        console.print(f"taze/{__version__}")
+        raise typer.Exit(0)
+
+    if mode not in MODES:
+        console.print(
+            f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. "
+            f"Available: {' | '.join(MODES)}"
+        )
+        raise typer.Exit(1)
+
+    if sort and sort not in SORT_CHOICES:
+        console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
+        raise typer.Exit(1)
+
+    if install or update:
+        write = True
+    if interactive:
         write = True
 
-    # Resolve pyproject.toml path
-    toml_path = path if path.name == "pyproject.toml" else path / "pyproject.toml"
-    if not toml_path.exists():
-        console.print(f"[red]✗[/]  [bold]pyproject.toml[/] not found at {toml_path}")
+    _, pre = MODE_SETTINGS[mode]
+
+    root = (cwd or Path(".")).resolve()
+    include_pat = build_name_filter(include) if include else None
+    exclude_pat = build_name_filter(exclude) if exclude else None
+
+    # ── Collect files ─────────────────────────────────────────────────────────
+    if recursive:
+        target_files: list[Path] = []
+        seen: set[Path] = set()
+        for subdir in sorted(root.rglob(".")):
+            for f in discover_files(subdir):
+                if f not in seen:
+                    seen.add(f)
+                    target_files.append(f)
+    else:
+        target_files = discover_files(root)
+
+    if not target_files:
+        if not silent:
+            console.print(f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}")
         raise typer.Exit(1)
 
-    # Build include/exclude sets
-    def _split_names(s: str | None) -> set[str] | None:
-        if not s:
-            return None
-        return {n.strip().lower().replace("_", "-") for n in s.split(",") if n.strip()}
+    # ── Build entries per file ────────────────────────────────────────────────
+    # file_path → group_label → raw entries
+    raw_file_groups: dict[Path, dict[str, list[tuple[str, Path, FileKind, int | None]]]] = {}
 
-    include_filter = _split_names(include)
-    exclude_filter = _split_names(exclude) or set()
+    for file_path in target_files:
+        if file_path.name == "pyproject.toml":
+            try:
+                raw_groups = parse_pyproject(file_path)
+            except Exception as e:
+                if not silent:
+                    console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
+                continue
+            raw_file_groups[file_path] = {
+                label: [(s, file_path, FileKind.PYPROJECT, None) for s in deps]
+                for label, deps in raw_groups.items()
+            }
+        else:
+            try:
+                pairs = parse_requirements_file(file_path)
+            except Exception as e:
+                if not silent:
+                    console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
+                continue
+            raw_file_groups[file_path] = {
+                "requirements": [
+                    (s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs
+                ]
+            }
 
-    # Parse all dep groups from the TOML
-    try:
-        raw_groups = parse_pyproject(toml_path)
-    except Exception as e:
-        console.print(f"[red]✗[/]  Failed to parse pyproject.toml: {e}")
+    if not raw_file_groups:
         raise typer.Exit(1)
 
-    if not raw_groups:
-        console.print("[yellow]No dependency sections found in pyproject.toml.[/]")
-        raise typer.Exit(0)
+    total_packages = sum(
+        len(entries)
+        for groups in raw_file_groups.values()
+        for entries in groups.values()
+    )
 
-    # Filter by --group if requested
-    if group:
-        # Accept bare name like "dev" → match "group:dev", "optional:dev", or "dev-dependencies"
-        matched = {
-            k: v
-            for k, v in raw_groups.items()
-            if k == group or k.endswith(f":{group}") or k == f"{group}-dependencies"
-        }
-        if not matched:
-            available = ", ".join(raw_groups.keys())
-            console.print(
-                f"[red]✗[/]  Group [bold]{group!r}[/] not found. Available: {available}"
-            )
-            raise typer.Exit(1)
-        raw_groups = matched
+    # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
+    resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
-    # ── Header ──────────────────────────────────────────────────────────────
-    console.print()
-    console.print(f"  [bold]📦  pyproject.toml[/]  [dim]{toml_path.resolve()}[/]")
-    console.print()
+    status_msg = f"[dim]Checking {total_packages} package(s) on PyPI…[/]"
+    with (console.status(status_msg, spinner="dots") if not silent else _nullctx()):
+        for file_path, groups in raw_file_groups.items():
+            resolved[file_path] = {}
+            for label, entries in groups.items():
+                resolved[file_path][label] = resolve_deps(
+                    entries,
+                    include_pat=include_pat,
+                    exclude_pat=exclude_pat,
+                    pre=pre,
+                    concurrency=concurrency,
+                )
 
-    # ── Fetch all groups concurrently ────────────────────────────────────────
-    all_infos: dict[str, list[DepInfo]] = {}
+    # ── JSON output ───────────────────────────────────────────────────────────
+    if output_json:
+        render_json({str(fp): grps for fp, grps in resolved.items()})
+        total_outdated = _count_outdated(resolved, mode)
+        raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
 
-    total_packages = sum(len(v) for v in raw_groups.values())
-    with console.status(
-        f"[dim]Checking {total_packages} packages on PyPI…[/]", spinner="dots"
-    ):
-        for label, dep_strings in raw_groups.items():
-            all_infos[label] = resolve_group(
-                dep_strings, include_filter, exclude_filter, workers
-            )
-
-    # ── Render ───────────────────────────────────────────────────────────────
-    printed_any = False
-    total_outdated = 0
-    for label, infos in all_infos.items():
-        if render_group(label, infos, all_deps):
-            console.print()
-            printed_any = True
-        total_outdated += sum(1 for i in infos if i.is_outdated)
-
-    if not printed_any:
-        console.print("  [green]✓  All dependencies are up to date![/]")
+    # ── Rich display ──────────────────────────────────────────────────────────
+    if not silent:
         console.print()
-        raise typer.Exit(0)
+
+    total_outdated = 0
+    printed_any = False
+
+    for file_path, groups in resolved.items():
+        file_outdated = _count_outdated({file_path: groups}, mode)
+        total_outdated += file_outdated
+
+        if not silent:
+            # Compute column widths across all groups in this file so every
+            # group aligns to the same grid.
+            all_infos = [i for infos in groups.values() for i in infos]
+            from .display import _age
+            col_widths = (
+                max((len(i.name)                       for i in all_infos), default=0),
+                max((len(i.current_spec)               for i in all_infos), default=0),
+                max((len(_age(i.current_release_date)) for i in all_infos), default=0),
+                max((len(_age(i.release_date))         for i in all_infos), default=0),
+                max((len(i.latest_spec)                for i in all_infos), default=0),
+            )
+
+            console.print(
+                f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]"
+            )
+            console.print()
+
+            for label, infos in groups.items():
+                if render_group(
+                    label,
+                    infos,
+                    mode=mode,
+                    show_up_to_date=all_deps,
+                    sort=sort,
+                    col_widths=col_widths,
+                ):
+                    console.print()
+                    printed_any = True
+
+            if file_outdated == 0:
+                console.print("  [green]✓  All dependencies are up to date![/]")
+                console.print()
 
     if total_outdated == 0:
         raise typer.Exit(0)
 
-    # ── Write ────────────────────────────────────────────────────────────────
-    if write:
-        updated = write_updates(toml_path, all_infos)
-        console.print(
-            f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to "
-            f"[cyan]{toml_path.name}[/]"
-        )
+    # ── Interactive selection ─────────────────────────────────────────────────
+    selected_for_update: set[str] | None = None  # None = all
+
+    if interactive and not silent:
+        all_outdated = [
+            i
+            for groups in resolved.values()
+            for infos in groups.values()
+            for i in infos
+            if i.is_shown(mode)
+        ]
+        chosen = interactive_select(all_outdated)
+        selected_for_update = {i.name for i in chosen}
         console.print()
-    else:
+
+    # ── Write ─────────────────────────────────────────────────────────────────
+    if write:
+        total_written = 0
+        for file_path, groups in resolved.items():
+            # Filter to selected packages if in interactive mode
+            if selected_for_update is not None:
+                filtered: dict[str, list[DepInfo]] = {
+                    label: [i for i in infos if i.name in selected_for_update]
+                    for label, infos in groups.items()
+                }
+            else:
+                filtered = groups
+
+            if file_path.name == "pyproject.toml":
+                updated = write_pyproject_updates(file_path, filtered)
+            else:
+                flat = [i for infos in filtered.values() for i in infos]
+                updated = write_requirements_updates(file_path, flat)
+
+            if updated and not silent:
+                console.print(
+                    f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to "
+                    f"[cyan]{file_path.name}[/]"
+                )
+                total_written += updated
+
+        if total_written and not silent:
+            console.print()
+    elif not silent:
         console.print(
-            f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s) to pyproject.toml[/]"
+            f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]"
         )
         console.print()
 
-    # ── uv sync ──────────────────────────────────────────────────────────────
-    if install:
-        console.print("  [dim]Running [cyan]uv sync[/]…[/]")
+    # ── Prompt to install after -w (unless -i/-u already set) ───────────────
+    if write and not install and not update and not silent and total_written > 0:
+        console.print("  [dim]Run [cyan]uv sync[/] now? [bold](y/N)[/] [/]", end="")
+        try:
+            answer = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+            console.print()
+        if answer == "y":
+            install = True
+
+    # ── uv sync / install ────────────────────────────────────────────────────
+    if install or update:
+        uv_cwd = next(
+            (fp.parent for fp in resolved if fp.name == "pyproject.toml"),
+            root,
+        )
+        if not silent:
+            console.print("  [dim]Running [cyan]uv sync[/]…[/]")
         result = subprocess.run(
             ["uv", "sync"],
-            cwd=toml_path.parent,
-            capture_output=False,
+            cwd=uv_cwd,
+            capture_output=silent,
         )
         if result.returncode != 0:
-            console.print("[red]✗[/]  [bold]uv sync[/] failed")
+            if not silent:
+                console.print("[red]✗[/]  [bold]uv sync[/] failed")
             raise typer.Exit(result.returncode)
-        console.print("  [green]✓[/]  [bold]uv sync[/] complete")
-        console.print()
+        if not silent:
+            console.print("  [green]✓[/]  [bold]uv sync[/] complete")
+            console.print()
+
+    raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -> int:
+    return sum(
+        1
+        for groups in resolved.values()
+        for infos in groups.values()
+        for i in infos
+        if i.is_shown(mode)
+    )
+
+
+class _nullctx:
+    """No-op context manager (replaces console.status when --silent)."""
+    def __enter__(self) -> "_nullctx":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+
+# ─── Entry point ──────────────────────────────────────────────────────────────
 
 
 def run() -> None:
