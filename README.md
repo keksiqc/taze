@@ -26,6 +26,8 @@ Inspired by [taze](https://github.com/antfu-collective/taze) for Node.js — por
 ```sh
 uv tool install taze
 # or
+uvx taze
+# or
 pip install taze
 ```
 
