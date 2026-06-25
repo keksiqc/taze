@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from taze.models import DepInfo
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from taze.models import DepInfo
 
 
 def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> int:
@@ -11,7 +15,7 @@ def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> 
     content = path.read_text(encoding="utf-8")
     count = 0
 
-    for _label, infos in all_infos.items():
+    for infos in all_infos.values():
         for info in infos:
             if not info.is_outdated:
                 continue

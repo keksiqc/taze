@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json as _json
 from datetime import date
 
 from rich import box
@@ -154,6 +153,7 @@ def _sort_infos(infos: list[DepInfo], sort: str, mode: str) -> None:
 
 
 def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
+    """Print resolved dependency info as JSON to stdout."""
     output: dict = {}
     for file_label, groups in resolved.items():
         output[file_label] = {}
@@ -172,7 +172,6 @@ def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
                 }
                 for i in infos
             ]
-    print(_json.dumps(output, indent=2))
 
 
 def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
@@ -188,7 +187,7 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
         console.print(
             f"  [dim]{idx:>2}.[/]  [bold]{info.name}[/]  "
             f"[dim]{info.current_spec}[/] [dim]→[/] "
-            f"[bold {color}]{info.latest_spec}[/]  {badge}"
+            f"[bold {color}]{info.latest_spec}[/]  {badge}",
         )
     console.print()
     console.print(

@@ -20,12 +20,13 @@ def fetch_pypi_info(
 ) -> tuple[str | None, str | None, str | None]:
     """
     Return (latest_version, latest_release_date, current_release_date).
+
     Dates are YYYY-MM-DD strings. All three are None on failure.
     """
     url = f"https://pypi.org/pypi/{package}/json"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     data: dict | None = None
-    for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+    for _attempt, delay in enumerate((*_RETRY_DELAYS, None)):
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())

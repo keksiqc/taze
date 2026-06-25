@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from packaging.requirements import Requirement
 from packaging.version import InvalidVersion, Version
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?": -1}
@@ -75,25 +79,28 @@ MODE_SHOWS_MINOR: dict[str, bool] = {
 
 
 class FileKind(StrEnum):
+    """Source file type for a parsed dependency entry."""
+
     PYPROJECT = "pyproject"
     REQUIREMENTS = "requirements"
 
 
 def calc_bump(current: str | None, latest: str | None) -> str:
+    """Return the bump level between current and latest version strings."""
     if not current or not latest:
         return "?"
     try:
         c = Version(current)
         la = Version(latest)
-        if la <= c:
-            return "same"
-        if la.major > c.major:
-            return "major"
-        if la.minor > c.minor:
-            return "minor"
-        return "patch"
     except InvalidVersion:
         return "?"
+    if la <= c:
+        return "same"
+    if la.major > c.major:
+        return "major"
+    if la.minor > c.minor:
+        return "minor"
+    return "patch"
 
 
 def bump_allowed(bump: str, mode: str) -> bool:
@@ -102,13 +109,13 @@ def bump_allowed(bump: str, mode: str) -> bool:
         return False
     if bump == "major" and not MODE_SHOWS_MAJOR.get(mode, True):
         return False
-    if bump == "minor" and not MODE_SHOWS_MINOR.get(mode, True):
-        return False
-    return True
+    return not (bump == "minor" and not MODE_SHOWS_MINOR.get(mode, True))
 
 
 @dataclass
 class DepInfo:
+    """Holds parsed and resolved metadata for a single dependency."""
+
     raw: str
     name: str
     current: str | None
@@ -124,12 +131,14 @@ class DepInfo:
 
     @property
     def current_spec(self) -> str:
+        """Return the current version specifier string, e.g. '>=1.2.3'."""
         if self.operator and self.current:
             return f"{self.operator}{self.current}"
         return "(any)"
 
     @property
     def latest_spec(self) -> str:
+        """Return the latest version as a specifier string, e.g. '>=2.0.0'."""
         if not self.latest:
             return "—"
         if self.operator:
@@ -142,6 +151,7 @@ class DepInfo:
 
     @property
     def is_outdated(self) -> bool:
+        """Return True if a newer version is available and was fetched successfully."""
         return self.bump not in ("same", "?") and not self.fetch_error
 
     def is_shown(self, mode: str) -> bool:
@@ -153,6 +163,7 @@ class DepInfo:
         return bump_allowed(self.bump, mode)
 
     def updated_raw(self) -> str:
+        """Return the raw dependency string rewritten to pin the latest version."""
         if not self.latest or not self.operator:
             return self.raw
         try:

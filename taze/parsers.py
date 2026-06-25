@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import re
 import tomllib
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from packaging.requirements import InvalidRequirement, Requirement
 
 from taze.models import DepInfo, FileKind
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def parse_dep_string(
@@ -16,6 +20,7 @@ def parse_dep_string(
     file_kind: FileKind = FileKind.PYPROJECT,
     line_number: int | None = None,
 ) -> DepInfo | None:
+    """Parse a raw dependency string into a DepInfo, or None if it should be skipped."""
     raw = raw.strip()
     if not raw or raw.startswith(("#", "-")):
         return None
@@ -95,6 +100,7 @@ def parse_requirements_file(path: Path) -> list[tuple[int, str]]:
 def build_name_filter(pattern: str) -> re.Pattern[str] | None:
     """
     Build a compiled regex from a comma-separated list.
+
     Entries wrapped in /slashes/ are treated as raw regex patterns;
     plain names are matched literally (normalised to lowercase with hyphens).
     """

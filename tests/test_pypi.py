@@ -35,19 +35,19 @@ class TestFetchPypiInfo:
         with patch("urllib.request.urlopen", return_value=_mock_urlopen(d)):
             return fetch_pypi_info("requests", **kw)
 
-    def test_returns_latest_stable(self):
+    def test_returns_latest_stable(self) -> None:
         version, _, _ = self._fetch()
         assert version == "2.0.0"
 
-    def test_skips_prerelease_by_default(self):
+    def test_skips_prerelease_by_default(self) -> None:
         version, _, _ = self._fetch()
         assert "a" not in (version or "")
 
-    def test_includes_prerelease_with_pre(self):
+    def test_includes_prerelease_with_pre(self) -> None:
         version, _, _ = self._fetch(pre=True)
         assert version == "3.0.0a1"
 
-    def test_skips_yanked_in_full_scan(self):
+    def test_skips_yanked_in_full_scan(self) -> None:
         # fast path trusts info.version; force full scan by leaving info.version empty
         data = {
             "info": {"version": ""},
@@ -56,7 +56,7 @@ class TestFetchPypiInfo:
         version, _, _ = self._fetch(data=data)
         assert version is None
 
-    def test_skips_empty_release_in_full_scan(self):
+    def test_skips_empty_release_in_full_scan(self) -> None:
         data = {
             "info": {"version": ""},
             "releases": {"1.2.0": []},
@@ -64,27 +64,26 @@ class TestFetchPypiInfo:
         version, _, _ = self._fetch(data=data)
         assert version is None
 
-    def test_returns_release_date(self):
+    def test_returns_release_date(self) -> None:
         _, latest_date, _ = self._fetch()
         assert latest_date == "2024-03-10"
 
-    def test_returns_current_date(self):
+    def test_returns_current_date(self) -> None:
         _, _, current_date = self._fetch(current_version="1.1.0")
         assert current_date == "2023-06-15"
 
-    def test_current_date_none_when_not_provided(self):
+    def test_current_date_none_when_not_provided(self) -> None:
         _, _, current_date = self._fetch()
         assert current_date is None
 
-    def test_returns_none_on_network_error(self):
+    def test_returns_none_on_network_error(self) -> None:
         from urllib.error import URLError
 
-        with patch("urllib.request.urlopen", side_effect=URLError("timeout")):
-            with patch("time.sleep"):
-                result = fetch_pypi_info("requests")
+        with patch("urllib.request.urlopen", side_effect=URLError("timeout")), patch("time.sleep"):
+            result = fetch_pypi_info("requests")
         assert result == (None, None, None)
 
-    def test_retries_on_network_error(self):
+    def test_retries_on_network_error(self) -> None:
         from urllib.error import URLError
 
         call_count = 0
@@ -93,12 +92,12 @@ class TestFetchPypiInfo:
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise URLError("timeout")
+                msg = "timeout"
+                raise URLError(msg)
             return _mock_urlopen(FAKE_DATA)
 
-        with patch("urllib.request.urlopen", side_effect=urlopen_side_effect):
-            with patch("time.sleep") as mock_sleep:
-                version, _, _ = fetch_pypi_info("requests")
+        with patch("urllib.request.urlopen", side_effect=urlopen_side_effect), patch("time.sleep") as mock_sleep:
+            version, _, _ = fetch_pypi_info("requests")
 
         assert version == "2.0.0"
         assert call_count == 3
@@ -106,14 +105,14 @@ class TestFetchPypiInfo:
 
 
 class TestUploadDate:
-    def test_known_version(self):
+    def test_known_version(self) -> None:
         assert _upload_date(FAKE_RELEASES, "1.0.0") == "2022-01-01"
 
-    def test_unknown_version(self):
+    def test_unknown_version(self) -> None:
         assert _upload_date(FAKE_RELEASES, "9.9.9") is None
 
-    def test_none_version(self):
+    def test_none_version(self) -> None:
         assert _upload_date(FAKE_RELEASES, None) is None
 
-    def test_empty_files(self):
+    def test_empty_files(self) -> None:
         assert _upload_date({"1.0.0": []}, "1.0.0") is None

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import re
 import subprocess
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Self
 
 import typer
 
@@ -19,6 +17,11 @@ from taze.parsers import (
 )
 from taze.pypi import fetch_pypi_info
 from taze.writers import write_pyproject_updates, write_requirements_updates
+
+
+if TYPE_CHECKING:
+    import re
+    from collections.abc import Callable
 
 
 __version__ = "0.1.0"
@@ -46,6 +49,7 @@ def resolve_deps(
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
+    """Fetch latest PyPI info for all deps and return enriched DepInfo list."""
     infos: list[DepInfo] = []
     for raw, src, kind, lineno in entries:
         info = parse_dep_string(raw, source_file=src, file_kind=kind, line_number=lineno)
@@ -83,6 +87,7 @@ def resolve_deps(
 
 
 def discover_files(root: Path) -> list[Path]:
+    """Return pyproject.toml and requirements*.txt files found under root."""
     found: list[Path] = []
     pyproject = root / "pyproject.toml"
     if pyproject.exists():
@@ -186,7 +191,7 @@ def main(
     ] = 10,
 ) -> None:
     """
-    🥬  [bold]taze[/bold] — keep your Python deps fresh
+    🥬  [bold]taze[/bold] — keep your Python deps fresh.
 
     Reads [cyan]pyproject.toml[/] and/or [cyan]requirements*.txt[/], checks PyPI for
     newer versions, and shows a grouped diff.
@@ -221,7 +226,7 @@ def main(
 
     _, pre = MODE_SETTINGS[mode]
 
-    root = (cwd or Path(".")).resolve()
+    root = (cwd or Path()).resolve()
     include_pat = build_name_filter(include) if include else None
     exclude_pat = build_name_filter(exclude) if exclude else None
 
@@ -265,7 +270,7 @@ def main(
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
-                "requirements": [(s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs]
+                "requirements": [(s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs],
             }
 
     if not raw_file_groups:
@@ -293,7 +298,7 @@ def main(
             spinner="dots",
         )
         if not silent
-        else _nullctx()
+        else _NullCtx()
     )
     with status_ctx as _status:
         on_progress = _make_progress(_status)
@@ -441,10 +446,10 @@ def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -
     return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
 
 
-class _nullctx:
+class _NullCtx:
     """No-op context manager (replaces console.status when --silent)."""
 
-    def __enter__(self) -> _nullctx:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -455,6 +460,7 @@ class _nullctx:
 
 
 def run() -> None:
+    """Entry point for the taze CLI."""
     app()
 
 
