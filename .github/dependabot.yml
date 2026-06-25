@@ -12,6 +12,8 @@ updates:
       github-actions:
         patterns:
           - "*"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "uv"
     directory: "/"
@@ -23,3 +25,5 @@ updates:
         dependency-type: "development"
         patterns:
           - "*"
+    cooldown:
+      default-days: 7
