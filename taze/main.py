@@ -20,6 +20,7 @@ from .parsers import (
 from .pypi import fetch_pypi_info
 from .writers import write_pyproject_updates, write_requirements_updates
 
+
 __version__ = "0.1.0"
 
 app = typer.Typer(

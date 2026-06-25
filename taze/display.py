@@ -11,6 +11,7 @@ from rich.text import Text
 
 from .models import BUMP_BADGE, BUMP_COLOR, DepInfo
 
+
 console = Console()
 
 

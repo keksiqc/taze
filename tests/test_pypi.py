@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from taze.pypi import _upload_date, fetch_pypi_info
 
+
 FAKE_RELEASES = {
     "1.0.0": [{"upload_time": "2022-01-01T12:00:00", "yanked": False}],
     "1.1.0": [{"upload_time": "2023-06-15T08:00:00", "yanked": False}],

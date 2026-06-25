@@ -7,6 +7,7 @@ from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import InvalidVersion, Version
 
+
 BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?": -1}
 
 BUMP_COLOR: dict[str, str] = {
