@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated, Callable
+from typing import Annotated
 
 import typer
 
@@ -42,7 +43,7 @@ def resolve_deps(
     exclude_pat: re.Pattern[str] | None,
     pre: bool,
     concurrency: int,
-    on_progress: "Callable[[int], None] | None" = None,
+    on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
     infos: list[DepInfo] = []
     for raw, src, kind, lineno in entries:

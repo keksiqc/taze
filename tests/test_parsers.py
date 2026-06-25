@@ -3,9 +3,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
-from taze.models import FileKind
 from taze.parsers import (
     build_name_filter,
     parse_dep_string,

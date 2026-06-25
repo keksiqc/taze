@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from taze.pypi import fetch_pypi_info, _upload_date
-
+from taze.pypi import _upload_date, fetch_pypi_info
 
 FAKE_RELEASES = {
     "1.0.0": [{"upload_time": "2022-01-01T12:00:00", "yanked": False}],

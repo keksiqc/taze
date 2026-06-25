@@ -3,8 +3,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from taze.models import DepInfo, FileKind
 from taze.writers import write_pyproject_updates, write_requirements_updates
 

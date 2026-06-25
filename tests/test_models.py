@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
-from taze.models import calc_bump, bump_allowed, DepInfo, FileKind
+from taze.models import DepInfo, bump_allowed, calc_bump
 
 
 class TestCalcBump:
