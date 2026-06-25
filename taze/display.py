@@ -9,7 +9,7 @@ from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
-from .models import BUMP_BADGE, BUMP_COLOR, DepInfo
+from taze.models import BUMP_BADGE, BUMP_COLOR, DepInfo
 
 
 console = Console()
@@ -141,7 +141,7 @@ def render_group(
 
 
 def _sort_infos(infos: list[DepInfo], sort: str, mode: str) -> None:
-    from .models import BUMP_ORDER
+    from taze.models import BUMP_ORDER
 
     if sort == "name-asc":
         infos.sort(key=lambda i: i.name)

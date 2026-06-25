@@ -9,16 +9,16 @@ from typing import Annotated
 
 import typer
 
-from .display import console, interactive_select, render_group, render_json
-from .models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
-from .parsers import (
+from taze.display import console, interactive_select, render_group, render_json
+from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
+from taze.parsers import (
     build_name_filter,
     parse_dep_string,
     parse_pyproject,
     parse_requirements_file,
 )
-from .pypi import fetch_pypi_info
-from .writers import write_pyproject_updates, write_requirements_updates
+from taze.pypi import fetch_pypi_info
+from taze.writers import write_pyproject_updates, write_requirements_updates
 
 
 __version__ = "0.1.0"
@@ -329,7 +329,7 @@ def main(
             # Compute column widths across all groups in this file so every
             # group aligns to the same grid.
             all_infos = [i for infos in groups.values() for i in infos]
-            from .display import _age
+            from taze.display import _age
 
             col_widths = (
                 max((len(i.name) for i in all_infos), default=0),

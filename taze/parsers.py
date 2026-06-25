@@ -6,7 +6,7 @@ from pathlib import Path
 
 from packaging.requirements import InvalidRequirement, Requirement
 
-from .models import DepInfo, FileKind
+from taze.models import DepInfo, FileKind
 
 
 def parse_dep_string(

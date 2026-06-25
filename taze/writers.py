@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import DepInfo
+from taze.models import DepInfo
 
 
 def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> int:
