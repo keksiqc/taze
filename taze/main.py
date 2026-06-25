@@ -176,6 +176,7 @@ def main(
         bool,
         typer.Option(
             "--fail-on-outdated",
+            "--check",
             help="Exit with code 1 if outdated dependencies are found",
         ),
     ] = False,
