@@ -4,7 +4,7 @@ import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Callable
 
 import typer
 
@@ -42,6 +42,7 @@ def resolve_deps(
     exclude_pat: re.Pattern[str] | None,
     pre: bool,
     concurrency: int,
+    on_progress: "Callable[[int], None] | None" = None,
 ) -> list[DepInfo]:
     infos: list[DepInfo] = []
     for raw, src, kind, lineno in entries:
@@ -75,6 +76,8 @@ def resolve_deps(
             except Exception:
                 info.fetch_error = True
             info.bump = calc_bump(info.current, info.latest)
+            if on_progress is not None:
+                on_progress(1)
 
     return infos
 
@@ -297,8 +300,30 @@ def main(
     # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
-    status_msg = f"[dim]Checking {total_packages} package(s) on PyPI…[/]"
-    with console.status(status_msg, spinner="dots") if not silent else _nullctx():
+    done_count = 0
+
+    def _make_progress(status_obj: object) -> Callable[[int], None]:
+        def _on_progress(n: int) -> None:
+            nonlocal done_count
+            done_count += n
+            if not silent and hasattr(status_obj, "update"):
+                status_obj.update(
+                    f"[dim]Checking packages on PyPI… "
+                    f"{done_count}/{total_packages}[/]"
+                )
+
+        return _on_progress
+
+    status_ctx = (
+        console.status(
+            f"[dim]Checking packages on PyPI… 0/{total_packages}[/]",
+            spinner="dots",
+        )
+        if not silent
+        else _nullctx()
+    )
+    with status_ctx as _status:
+        on_progress = _make_progress(_status)
         for file_path, groups in raw_file_groups.items():
             resolved[file_path] = {}
             for label, entries in groups.items():
@@ -308,6 +333,7 @@ def main(
                     exclude_pat=exclude_pat,
                     pre=pre,
                     concurrency=concurrency,
+                    on_progress=on_progress,
                 )
 
     # ── JSON output ───────────────────────────────────────────────────────────
