@@ -25,7 +25,7 @@ def parse_dep_string(
 
     try:
         req = Requirement(raw)
-    except InvalidRequirement, Exception:
+    except (InvalidRequirement, Exception):
         return None
 
     name = req.name.lower().replace("_", "-")

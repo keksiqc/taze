@@ -416,7 +416,7 @@ def main(
         console.print("  [dim]Run [cyan]uv sync[/] now? [bold](y/N)[/] [/]", end="")
         try:
             answer = input().strip().lower()
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             answer = ""
             console.print()
         if answer == "y":

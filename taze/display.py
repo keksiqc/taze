@@ -204,7 +204,7 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
 
     try:
         raw = input().strip()
-    except EOFError, KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt):
         console.print()
         return []
 
