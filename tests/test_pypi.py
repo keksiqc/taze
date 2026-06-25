@@ -77,6 +77,7 @@ class TestFetchPypiInfo:
 
     def test_returns_none_on_network_error(self):
         from urllib.error import URLError
+
         with patch("urllib.request.urlopen", side_effect=URLError("timeout")):
             with patch("time.sleep"):
                 result = fetch_pypi_info("requests")
@@ -84,6 +85,7 @@ class TestFetchPypiInfo:
 
     def test_retries_on_network_error(self):
         from urllib.error import URLError
+
         call_count = 0
 
         def urlopen_side_effect(*a, **kw):

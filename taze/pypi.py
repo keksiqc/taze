@@ -29,7 +29,7 @@ def fetch_pypi_info(
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
             break
-        except (URLError, OSError, ValueError):
+        except URLError, OSError, ValueError:
             if delay is None:
                 return None, None, None
             time.sleep(delay)

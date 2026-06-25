@@ -73,19 +73,13 @@ def render_group(
     console.print(header)
 
     name_width = max(max((len(i.name) for i in visible), default=0), col_widths[0])
-    spec_width = max(
-        max((len(i.current_spec) for i in visible), default=0), col_widths[1]
-    )
+    spec_width = max(max((len(i.current_spec) for i in visible), default=0), col_widths[1])
     cur_age_width = max(
         max((len(_age(i.current_release_date)) for i in visible), default=0),
         col_widths[2],
     )
-    lat_age_width = max(
-        max((len(_age(i.release_date)) for i in visible), default=0), col_widths[3]
-    )
-    latest_spec_width = max(
-        max((len(i.latest_spec) for i in visible), default=0), col_widths[4]
-    )
+    lat_age_width = max(max((len(_age(i.release_date)) for i in visible), default=0), col_widths[3])
+    latest_spec_width = max(max((len(i.latest_spec) for i in visible), default=0), col_widths[4])
 
     table = Table(
         box=box.SIMPLE,
@@ -197,14 +191,13 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
         )
     console.print()
     console.print(
-        "  [dim]Enter numbers (e.g. [cyan]1,3[/]), [cyan]a[/] for all, "
-        "or press Enter to skip:[/] ",
+        "  [dim]Enter numbers (e.g. [cyan]1,3[/]), [cyan]a[/] for all, or press Enter to skip:[/] ",
         end="",
     )
 
     try:
         raw = input().strip()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         console.print()
         return []
 

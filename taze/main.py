@@ -47,9 +47,7 @@ def resolve_deps(
 ) -> list[DepInfo]:
     infos: list[DepInfo] = []
     for raw, src, kind, lineno in entries:
-        info = parse_dep_string(
-            raw, source_file=src, file_kind=kind, line_number=lineno
-        )
+        info = parse_dep_string(raw, source_file=src, file_kind=kind, line_number=lineno)
         if info is None:
             continue
         if include_pat and not include_pat.match(info.name):
@@ -62,10 +60,7 @@ def resolve_deps(
         return infos
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = {
-            pool.submit(fetch_pypi_info, i.name, pre=pre, current_version=i.current): i
-            for i in infos
-        }
+        futures = {pool.submit(fetch_pypi_info, i.name, pre=pre, current_version=i.current): i for i in infos}
         for fut in as_completed(futures):
             info = futures[fut]
             try:
@@ -116,9 +111,7 @@ def main(
         Path | None,
         typer.Option("--cwd", "-C", help="Working directory", show_default=False),
     ] = None,
-    write: Annotated[
-        bool, typer.Option("--write", "-w", help="Write updates back to file")
-    ] = False,
+    write: Annotated[bool, typer.Option("--write", "-w", help="Write updates back to file")] = False,
     install: Annotated[
         bool,
         typer.Option(
@@ -163,18 +156,14 @@ def main(
             help="Skip these deps (comma-separated names or [dim]/regex/[/])",
         ),
     ] = None,
-    all_deps: Annotated[
-        bool, typer.Option("--all", "-a", help="Show up-to-date packages too")
-    ] = False,
+    all_deps: Annotated[bool, typer.Option("--all", "-a", help="Show up-to-date packages too")] = False,
     group: Annotated[
         bool,
         typer.Option("--group", help="Group dependencies by source file on display"),
     ] = False,
     sort: Annotated[
         str | None,
-        typer.Option(
-            "--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"
-        ),
+        typer.Option("--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"),
     ] = None,
     fail_on_outdated: Annotated[
         bool,
@@ -185,9 +174,7 @@ def main(
         ),
     ] = False,
     silent: Annotated[bool, typer.Option("--silent", "-s", help="No output")] = False,
-    output_json: Annotated[
-        bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)
-    ] = False,
+    output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)] = False,
     version: Annotated[
         bool,
         typer.Option("--version", "-v", help="Show version and exit", is_eager=True),
@@ -219,9 +206,7 @@ def main(
         raise typer.Exit(0)
 
     if mode not in MODES:
-        console.print(
-            f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}"
-        )
+        console.print(f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}")
         raise typer.Exit(1)
 
     if sort and sort not in SORT_CHOICES:
@@ -253,16 +238,12 @@ def main(
 
     if not target_files:
         if not silent:
-            console.print(
-                f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}"
-            )
+            console.print(f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}")
         raise typer.Exit(1)
 
     # ── Build entries per file ────────────────────────────────────────────────
     # file_path → group_label → raw entries
-    raw_file_groups: dict[
-        Path, dict[str, list[tuple[str, Path | None, FileKind, int | None]]]
-    ] = {}
+    raw_file_groups: dict[Path, dict[str, list[tuple[str, Path | None, FileKind, int | None]]]] = {}
 
     for file_path in target_files:
         if file_path.name == "pyproject.toml":
@@ -273,8 +254,7 @@ def main(
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
-                label: [(s, file_path, FileKind.PYPROJECT, None) for s in deps]
-                for label, deps in raw_groups.items()
+                label: [(s, file_path, FileKind.PYPROJECT, None) for s in deps] for label, deps in raw_groups.items()
             }
         else:
             try:
@@ -284,19 +264,13 @@ def main(
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
-                "requirements": [
-                    (s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs
-                ]
+                "requirements": [(s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs]
             }
 
     if not raw_file_groups:
         raise typer.Exit(1)
 
-    total_packages = sum(
-        len(entries)
-        for groups in raw_file_groups.values()
-        for entries in groups.values()
-    )
+    total_packages = sum(len(entries) for groups in raw_file_groups.values() for entries in groups.values())
 
     # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
@@ -308,10 +282,7 @@ def main(
             nonlocal done_count
             done_count += n
             if not silent and hasattr(status_obj, "update"):
-                status_obj.update(
-                    f"[dim]Checking packages on PyPI… "
-                    f"{done_count}/{total_packages}[/]"
-                )
+                status_obj.update(f"[dim]Checking packages on PyPI… {done_count}/{total_packages}[/]")
 
         return _on_progress
 
@@ -367,9 +338,7 @@ def main(
                 max((len(i.latest_spec) for i in all_infos), default=0),
             )
 
-            console.print(
-                f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]"
-            )
+            console.print(f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]")
             console.print()
 
             for label, infos in groups.items():
@@ -395,11 +364,7 @@ def main(
 
     if interactive and not silent:
         all_outdated = [
-            i
-            for groups in resolved.values()
-            for infos in groups.values()
-            for i in infos
-            if i.is_shown(mode)
+            i for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode)
         ]
         chosen = interactive_select(all_outdated)
         selected_for_update = {i.name for i in chosen}
@@ -412,8 +377,7 @@ def main(
             # Filter to selected packages if in interactive mode
             if selected_for_update is not None:
                 filtered: dict[str, list[DepInfo]] = {
-                    label: [i for i in infos if i.name in selected_for_update]
-                    for label, infos in groups.items()
+                    label: [i for i in infos if i.name in selected_for_update] for label, infos in groups.items()
                 }
             else:
                 filtered = groups
@@ -425,18 +389,13 @@ def main(
                 updated = write_requirements_updates(file_path, flat)
 
             if updated and not silent:
-                console.print(
-                    f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to "
-                    f"[cyan]{file_path.name}[/]"
-                )
+                console.print(f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to [cyan]{file_path.name}[/]")
                 total_written += updated
 
         if total_written and not silent:
             console.print()
     elif not silent:
-        console.print(
-            f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]"
-        )
+        console.print(f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]")
         console.print()
 
     # ── Prompt to install after -w (unless -i/-u already set) ───────────────
@@ -444,7 +403,7 @@ def main(
         console.print("  [dim]Run [cyan]uv sync[/] now? [bold](y/N)[/] [/]", end="")
         try:
             answer = input().strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             answer = ""
             console.print()
         if answer == "y":
@@ -478,13 +437,7 @@ def main(
 
 
 def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -> int:
-    return sum(
-        1
-        for groups in resolved.values()
-        for infos in groups.values()
-        for i in infos
-        if i.is_shown(mode)
-    )
+    return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
 
 
 class _nullctx:

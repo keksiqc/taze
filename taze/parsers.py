@@ -25,7 +25,7 @@ def parse_dep_string(
 
     try:
         req = Requirement(raw)
-    except (InvalidRequirement, Exception):
+    except InvalidRequirement, Exception:
         return None
 
     name = req.name.lower().replace("_", "-")
@@ -64,9 +64,7 @@ def parse_pyproject(path: Path) -> dict[str, list[str]]:
     if project_deps:
         groups["dependencies"] = [d for d in project_deps if isinstance(d, str)]
 
-    for grp, dep_list in (
-        data.get("project", {}).get("optional-dependencies", {}).items()
-    ):
+    for grp, dep_list in data.get("project", {}).get("optional-dependencies", {}).items():
         groups[f"optional:{grp}"] = [d for d in dep_list if isinstance(d, str)]
 
     for grp, dep_list in data.get("dependency-groups", {}).items():
