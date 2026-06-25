@@ -40,3 +40,13 @@ unsafe-fixes = true
 
 [tool.ruff.lint]
 extend-select = ["RUF", "I", "UP", "E", "F"]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+known-first-party = ["taze"]
+lines-after-imports = 2
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "double"
