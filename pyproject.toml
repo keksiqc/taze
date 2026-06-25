@@ -28,6 +28,7 @@ build-backend = "hatchling.build"
 packages = ["taze"]
 
 [tool.pytest.ini_options]
+cache_dir = ".cache/pytest"
 testpaths = ["tests"]
 
 [tool.ruff]
