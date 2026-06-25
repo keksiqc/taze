@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.request
 from urllib.error import URLError
 
 from packaging.version import InvalidVersion, Version
 
 _USER_AGENT = "taze/0.1.0 (https://github.com/keksiqc/taze)"
+_RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts 1→2 and 2→3
 
 
 def fetch_pypi_info(
@@ -19,12 +21,19 @@ def fetch_pypi_info(
     Return (latest_version, latest_release_date, current_release_date).
     Dates are YYYY-MM-DD strings. All three are None on failure.
     """
-    try:
-        url = f"https://pypi.org/pypi/{package}/json"
-        req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-    except (URLError, OSError, ValueError):
+    url = f"https://pypi.org/pypi/{package}/json"
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    data: dict | None = None
+    for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+            break
+        except (URLError, OSError, ValueError):
+            if delay is None:
+                return None, None, None
+            time.sleep(delay)
+    if data is None:
         return None, None, None
 
     info_version: str = data.get("info", {}).get("version", "")
