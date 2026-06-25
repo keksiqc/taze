@@ -6,7 +6,7 @@ from urllib.error import URLError
 
 from packaging.version import InvalidVersion, Version
 
-_USER_AGENT = "taze/0.1.0 (https://github.com/keksi/taze)"
+_USER_AGENT = "taze/0.1.0 (https://github.com/keksiqc/taze)"
 
 
 def fetch_pypi_info(
