@@ -8,7 +8,7 @@ from urllib.error import URLError
 from packaging.version import InvalidVersion, Version
 
 
-_USER_AGENT = "taze/0.1.0 (https://github.com/keksiqc/taze)"
+_USER_AGENT = "taze/0.1.1 (https://github.com/keksiqc/taze)"
 _RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts 1→2 and 2→3
 
 
