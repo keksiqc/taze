@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
 import typer
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from taze.display import console, interactive_select, render_group, render_json
 from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
@@ -281,27 +282,25 @@ def main(
     # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
-    done_count = 0
-
-    def _make_progress(status_obj: object) -> Callable[[int], None]:
-        def _on_progress(n: int) -> None:
-            nonlocal done_count
-            done_count += n
-            if not silent and hasattr(status_obj, "update"):
-                status_obj.update(f"[dim]Checking packages on PyPI… {done_count}/{total_packages}[/]")
-
-        return _on_progress
-
-    status_ctx = (
-        console.status(
-            f"[dim]Checking packages on PyPI… 0/{total_packages}[/]",
-            spinner="dots",
+    progress_ctx = (
+        Progress(
+            TextColumn("[dim]Checking packages on PyPI…[/]"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
         )
         if not silent
         else _NullCtx()
     )
-    with status_ctx as _status:
-        on_progress = _make_progress(_status)
+    with progress_ctx as _progress:
+        task_id = _progress.add_task("checking", total=total_packages) if not silent else None
+
+        def on_progress(n: int) -> None:
+            if not silent:
+                _progress.update(task_id, advance=n)
+
         for file_path, groups in raw_file_groups.items():
             resolved[file_path] = {}
             for label, entries in groups.items():
