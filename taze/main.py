@@ -10,6 +10,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
+from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
 from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
 from taze.parsers import (
@@ -113,17 +114,6 @@ def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> 
 # ─── File discovery ───────────────────────────────────────────────────────────
 
 
-def discover_files(root: Path) -> list[Path]:
-    """Return pyproject.toml and requirements*.txt files found under root."""
-    found: list[Path] = []
-    pyproject = root / "pyproject.toml"
-    if pyproject.exists():
-        found.append(pyproject)
-    for req in sorted(root.glob("requirements*.txt")):
-        found.append(req)
-    return found
-
-
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 
@@ -165,6 +155,17 @@ def main(
             help="Recursively search for pyproject.toml / requirements*.txt",
         ),
     ] = False,
+    ignore_paths: Annotated[
+        str | None,
+        typer.Option("--ignore-paths", help="Comma-separated glob paths to skip during recursive scans"),
+    ] = None,
+    ignore_other_workspaces: Annotated[
+        bool,
+        typer.Option(
+            "--ignore-other-workspaces/--include-other-workspaces",
+            help="Skip nested repositories and workspaces when scanning recursively",
+        ),
+    ] = True,
     interactive: Annotated[
         bool,
         typer.Option(
@@ -262,16 +263,13 @@ def main(
     exclude_pat = build_name_filter(exclude) if exclude else None
 
     # ── Collect files ─────────────────────────────────────────────────────────
-    if recursive:
-        target_files: list[Path] = []
-        seen: set[Path] = set()
-        for subdir in sorted(root.rglob(".")):
-            for f in discover_files(subdir):
-                if f not in seen:
-                    seen.add(f)
-                    target_files.append(f)
-    else:
-        target_files = discover_files(root)
+    ignored = tuple(p.strip() for p in (ignore_paths or "").split(",") if p.strip())
+    target_files = discover_files(
+        root,
+        recursive=recursive,
+        ignore_paths=ignored,
+        ignore_other_workspaces=ignore_other_workspaces,
+    )
 
     if not target_files:
         if not silent:
