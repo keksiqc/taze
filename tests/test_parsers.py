@@ -23,6 +23,11 @@ class TestParseDepString:
         assert d.current == "2.28.0"
         assert d.operator == "=="
 
+    def test_arbitrary_exact_pin(self) -> None:
+        d = parse_dep_string("requests===2.28.0")
+        assert d is not None
+        assert d.operator == "==="
+
     def test_gte_pin(self) -> None:
         d = parse_dep_string("httpx>=0.24.0")
         assert d is not None

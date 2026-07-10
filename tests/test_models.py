@@ -116,6 +116,24 @@ class TestDepInfoProperties:
         d = self._make(raw="requests>=1.0.0", operator=">=", current="1.0.0", latest="2.0.0")
         assert d.updated_raw() == "requests>=2.0.0"
 
+    def test_updated_raw_preserves_markers_and_other_bounds(self) -> None:
+        d = self._make(
+            raw='requests>=1.0,<2.0; python_version < "3.13"',
+            operator=">=",
+            current="1.0",
+            latest="1.9.2",
+        )
+        assert d.updated_raw() == 'requests>=1.9.2,<2.0; python_version < "3.13"'
+
+    def test_updated_raw_preserves_extras(self) -> None:
+        d = self._make(
+            raw="uvicorn[standard]>=0.20.0,<1",
+            operator=">=",
+            current="0.20.0",
+            latest="0.35.0",
+        )
+        assert d.updated_raw() == "uvicorn[standard]>=0.35.0,<1"
+
     def test_updated_raw_no_operator(self) -> None:
         d = self._make(raw="requests", operator=None, current=None, latest="2.0.0")
         assert d.updated_raw() == "requests"

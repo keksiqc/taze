@@ -38,7 +38,7 @@ def parse_dep_string(
     current: str | None = None
     operator: str | None = None
 
-    for op in ("==", ">=", "~=", ">"):
+    for op in ("===", "==", ">=", "~=", ">"):
         for spec in specs:
             if spec.operator == op:
                 current = spec.version

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -172,20 +173,20 @@ class DepInfo:
         if not self.latest or not self.operator:
             return self.raw
         try:
-            req = Requirement(self.raw)
+            Requirement(self.raw)
         except Exception:
             return self.raw
 
-        new_specs: list[str] = []
-        for spec in req.specifier:
-            if spec.operator in (">=", "==", ">"):
-                new_specs.append(f"{spec.operator}{self.latest}")
-            elif spec.operator == "~=":
-                n = len(spec.version.split("."))
-                parts = self.latest.split(".")[:n]
-                new_specs.append(f"~={'.'.join(parts)}")
-            else:
-                new_specs.append(str(spec))
+        if not self.current:
+            return self.raw
+        version = self.latest
+        if self.operator == "~=":
+            parts = self.latest.split(".")[: len(self.current.split("."))]
+            version = ".".join(parts)
 
-        extras = f"[{','.join(sorted(req.extras))}]" if req.extras else ""
-        return f"{req.name}{extras}{','.join(new_specs)}"
+        # Rewrite precisely the specifier we selected as the baseline. This
+        # preserves markers, extras, upper bounds and comments in PEP 508
+        # declarations instead of reserialising only the parsed name/specs.
+        old = f"{self.operator}{self.current}"
+        pattern = re.compile(rf"{re.escape(old)}(?![A-Za-z0-9_.!-])")
+        return pattern.sub(f"{self.operator}{version}", self.raw, count=1)
