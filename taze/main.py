@@ -132,6 +132,7 @@ def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> 
 
 @app.command()
 def main(
+    context: typer.Context,
     mode: Annotated[
         str,
         typer.Argument(
@@ -286,7 +287,6 @@ def main(
     root = (cwd or Path()).resolve()
     config_path = (root / config).resolve() if config and not config.is_absolute() else config
     project_config = load_config(root, config_path)
-    context = typer.get_current_context()
     include = _configured(context, "include", include, project_config)
     exclude = _configured(context, "exclude", exclude, project_config)
     recursive = _configured(context, "recursive", recursive, project_config)
