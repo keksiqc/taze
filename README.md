@@ -168,6 +168,9 @@ virtual environments, build/cache directories, and nested repositories/workspace
 default. Use `--ignore-paths examples/**,vendor/**` for additional exclusions, or
 `--include-other-workspaces` to deliberately scan nested workspaces.
 
+Project names declared in workspace `pyproject.toml` files are recognised as local
+packages and are not looked up on PyPI.
+
 ## Configuration
 
 Place options in `taze.toml` or in the `[tool.taze]` table of `pyproject.toml`.
