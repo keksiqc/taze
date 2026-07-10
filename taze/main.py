@@ -10,7 +10,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
-from taze.config import load_config
+from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
 from taze.installers import install_command
@@ -56,6 +56,7 @@ def resolve_deps(
     include_locked: bool,
     maturity_period: int,
     maturity_exclude_pat: re.Pattern[str] | None,
+    package_modes: object,
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
@@ -71,6 +72,9 @@ def resolve_deps(
             continue
         if info.is_locked and not include_locked:
             continue
+        info.effective_mode = package_mode_for(info.name, package_modes)
+        if info.effective_mode == "ignore":
+            continue
         infos.append(info)
 
     if not infos:
@@ -83,8 +87,8 @@ def resolve_deps(
                 i.name,
                 pre=pre,
                 current_version=i.current,
-                specifier=_resolution_specifier(i, mode=mode, include_locked=include_locked),
-                mode=mode,
+                specifier=_resolution_specifier(i, mode=i.effective_mode or mode, include_locked=include_locked),
+                mode=i.effective_mode or mode,
                 maturity_period=0 if maturity_exclude_pat and maturity_exclude_pat.match(i.name) else maturity_period,
             ): i
             for i in infos
@@ -293,6 +297,7 @@ def main(
         maturity_period_exclude,
         project_config,
     )
+    package_modes = project_config.get("package_mode", {})
     include_pat = build_name_filter(include) if include else None
     exclude_pat = build_name_filter(exclude) if exclude else None
     maturity_exclude_pat = build_name_filter(maturity_period_exclude) if maturity_period_exclude else None
@@ -376,6 +381,7 @@ def main(
                     include_locked=include_locked,
                     maturity_period=maturity_period,
                     maturity_exclude_pat=maturity_exclude_pat,
+                    package_modes=package_modes,
                     concurrency=concurrency,
                     on_progress=on_progress,
                 )

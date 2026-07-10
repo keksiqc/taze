@@ -104,6 +104,10 @@ class TestDepInfoProperties:
         assert d.is_shown("minor") is False
         assert d.is_shown("patch") is False
 
+    def test_is_shown_prefers_package_mode(self) -> None:
+        d = self._make(operator=">=", current="1.0.0", latest="2.0.0", bump="major", effective_mode="major")
+        assert d.is_shown("patch") is True
+
     def test_is_locked_for_exact_pin(self) -> None:
         assert self._make(operator="==", current="1.0.0").is_locked is True
         assert self._make(operator=">=", current="1.0.0").is_locked is False

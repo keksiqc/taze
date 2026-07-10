@@ -129,6 +129,7 @@ class DepInfo:
     current_release_date: str | None = None  # ISO date of the current pinned release
     bump: str = "?"
     fetch_error: bool = False
+    effective_mode: str | None = None
 
     @property
     def current_spec(self) -> str:
@@ -166,7 +167,7 @@ class DepInfo:
             return True
         if not self.is_outdated:
             return False
-        return bump_allowed(self.bump, mode)
+        return bump_allowed(self.bump, self.effective_mode or mode)
 
     def updated_raw(self) -> str:
         """Return the raw dependency string rewritten to pin the latest version."""

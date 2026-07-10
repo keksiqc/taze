@@ -6,6 +6,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from taze.models import MODES
+
 
 CONFIG_KEYS = {
     "include",
@@ -17,6 +19,7 @@ CONFIG_KEYS = {
     "concurrency",
     "maturity_period",
     "maturity_period_exclude",
+    "package_mode",
 }
 
 
@@ -41,3 +44,22 @@ def load_config(root: Path, config_path: Path | None = None) -> dict[str, Any]:
         if normalized in CONFIG_KEYS:
             config[normalized] = value
     return config
+
+
+def package_mode_for(name: str, package_modes: object) -> str | None:
+    """Return an exact or slash-delimited-regex policy for a package name."""
+    if not isinstance(package_modes, dict):
+        return None
+    for pattern, mode in package_modes.items():
+        if not isinstance(pattern, str) or not isinstance(mode, str):
+            continue
+        if mode != "ignore" and mode not in MODES:
+            continue
+        if pattern == name:
+            return mode
+        if pattern.startswith("/") and pattern.endswith("/"):
+            import re
+
+            if re.fullmatch(pattern[1:-1], name):
+                return mode
+    return None
