@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from taze.models import DepInfo, bump_allowed, calc_bump
 
 
@@ -57,9 +59,9 @@ class TestBumpAllowed:
 
 
 class TestDepInfoProperties:
-    def _make(self, **kw) -> DepInfo:
+    def _make(self, **kw: Any) -> DepInfo:
         defaults = {"raw": "requests>=2.0.0", "name": "requests", "current": None, "operator": None}
-        return DepInfo(**{**defaults, **kw})
+        return DepInfo(**cast(dict[str, Any], {**defaults, **kw}))
 
     def test_current_spec_with_operator(self) -> None:
         d = self._make(operator=">=", current="2.0.0")

@@ -3,12 +3,12 @@ from __future__ import annotations
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self, TypeVar, cast
 
 import typer
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
 from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
@@ -29,6 +29,9 @@ from taze.writers import write_pyproject_updates, write_requirements_updates
 if TYPE_CHECKING:
     import re
     from collections.abc import Callable
+
+
+T = TypeVar("T")
 
 
 __version__ = "0.1.1"
@@ -378,7 +381,7 @@ def main(
         else _NullCtx()
     )
     with progress_ctx as _progress:
-        task_id = _progress.add_task("checking", total=total_packages) if not silent else None
+        task_id = _progress.add_task("checking", total=total_packages)
 
         def on_progress(n: int) -> None:
             if not silent:
@@ -540,7 +543,7 @@ def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -
     return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
 
 
-def _configured(context: typer.Context, name: str, current: object, config: dict[str, object]) -> object:
+def _configured(context: typer.Context, name: str, current: T, config: dict[str, object]) -> T:
     """Use the project setting only when the corresponding CLI option was omitted."""
     if name not in config:
         return current
@@ -548,15 +551,15 @@ def _configured(context: typer.Context, name: str, current: object, config: dict
         source = context.get_parameter_source(name)
     except AttributeError:
         return current
-    return config[name] if source and source.name == "DEFAULT" else current
+    return cast(T, config[name]) if source and source.name == "DEFAULT" else current
 
 
 def _path_patterns(value: object) -> tuple[str, ...]:
     """Normalise a comma-separated string or TOML list of glob patterns."""
     if isinstance(value, str):
         return tuple(p.strip() for p in value.split(",") if p.strip())
-    if isinstance(value, list) and all(isinstance(p, str) for p in value):
-        return tuple(value)
+    if isinstance(value, list):
+        return tuple(p for p in value if isinstance(p, str))
     return ()
 
 
@@ -567,6 +570,12 @@ class _NullCtx:
         return self
 
     def __exit__(self, *_: object) -> None:
+        pass
+
+    def add_task(self, _description: str, *, total: int) -> TaskID:
+        return TaskID(0)
+
+    def update(self, _task_id: TaskID, *, advance: int) -> None:
         pass
 
 
