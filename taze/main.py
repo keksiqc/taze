@@ -10,6 +10,7 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
+from taze.config import load_config
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
 from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
@@ -133,6 +134,10 @@ def main(
     cwd: Annotated[
         Path | None,
         typer.Option("--cwd", "-C", help="Working directory", show_default=False),
+    ] = None,
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Path to a taze.toml configuration file"),
     ] = None,
     write: Annotated[bool, typer.Option("--write", "-w", help="Write updates back to file")] = False,
     install: Annotated[
@@ -259,11 +264,21 @@ def main(
     _, pre = MODE_SETTINGS[mode]
 
     root = (cwd or Path()).resolve()
+    config_path = (root / config).resolve() if config and not config.is_absolute() else config
+    project_config = load_config(root, config_path)
+    context = typer.get_current_context()
+    include = _configured(context, "include", include, project_config)
+    exclude = _configured(context, "exclude", exclude, project_config)
+    recursive = _configured(context, "recursive", recursive, project_config)
+    ignore_paths = _configured(context, "ignore_paths", ignore_paths, project_config)
+    ignore_other_workspaces = _configured(context, "ignore_other_workspaces", ignore_other_workspaces, project_config)
+    include_locked = _configured(context, "include_locked", include_locked, project_config)
+    concurrency = _configured(context, "concurrency", concurrency, project_config)
     include_pat = build_name_filter(include) if include else None
     exclude_pat = build_name_filter(exclude) if exclude else None
 
     # ── Collect files ─────────────────────────────────────────────────────────
-    ignored = tuple(p.strip() for p in (ignore_paths or "").split(",") if p.strip())
+    ignored = _path_patterns(ignore_paths)
     target_files = discover_files(
         root,
         recursive=recursive,
@@ -473,6 +488,26 @@ def main(
 
 def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -> int:
     return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
+
+
+def _configured(context: typer.Context, name: str, current: object, config: dict[str, object]) -> object:
+    """Use the project setting only when the corresponding CLI option was omitted."""
+    if name not in config:
+        return current
+    try:
+        source = context.get_parameter_source(name)
+    except AttributeError:
+        return current
+    return config[name] if source and source.name == "DEFAULT" else current
+
+
+def _path_patterns(value: object) -> tuple[str, ...]:
+    """Normalise a comma-separated string or TOML list of glob patterns."""
+    if isinstance(value, str):
+        return tuple(p.strip() for p in value.split(",") if p.strip())
+    if isinstance(value, list) and all(isinstance(p, str) for p in value):
+        return tuple(value)
+    return ()
 
 
 class _NullCtx:
