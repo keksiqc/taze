@@ -100,6 +100,16 @@ def parse_pyproject(path: Path) -> dict[str, list[str]]:
     return groups
 
 
+def parse_project_name(path: Path) -> str | None:
+    """Return a normalised PEP 621 project name, when one is declared."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    name = data.get("project", {}).get("name")
+    if not isinstance(name, str) or not name:
+        return None
+    return name.lower().replace("_", "-")
+
+
 def parse_requirements_file(path: Path) -> list[tuple[int, str]]:
     """Return (line_number, dep_string) pairs from a requirements file."""
     result: list[tuple[int, str]] = []

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from taze.parsers import (
     build_name_filter,
     parse_dep_string,
+    parse_project_name,
     parse_pyproject,
     parse_requirements_file,
 )
@@ -146,6 +147,10 @@ class TestParsePyproject:
     def test_empty_project(self, tmp_path) -> None:
         p = self._write(tmp_path, "[project]\nname = 'foo'\n")
         assert parse_pyproject(p) == {}
+
+    def test_project_name_is_normalised(self, tmp_path) -> None:
+        p = self._write(tmp_path, "[project]\nname = 'My_Package'\n")
+        assert parse_project_name(p) == "my-package"
 
 
 class TestParseRequirementsFile:

@@ -18,6 +18,7 @@ from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
 from taze.parsers import (
     build_name_filter,
     parse_dep_string,
+    parse_project_name,
     parse_pyproject,
     parse_requirements_file,
 )
@@ -57,6 +58,7 @@ def resolve_deps(
     maturity_period: int,
     maturity_exclude_pat: re.Pattern[str] | None,
     package_modes: object,
+    local_package_names: set[str],
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
@@ -69,6 +71,8 @@ def resolve_deps(
         if include_pat and not include_pat.match(info.name):
             continue
         if exclude_pat and exclude_pat.match(info.name):
+            continue
+        if info.name in local_package_names:
             continue
         if info.is_locked and not include_locked:
             continue
@@ -316,6 +320,17 @@ def main(
             console.print(f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}")
         raise typer.Exit(1)
 
+    local_package_names: set[str] = set()
+    for file_path in target_files:
+        if file_path.name != "pyproject.toml":
+            continue
+        try:
+            name = parse_project_name(file_path)
+        except Exception:
+            name = None
+        if name:
+            local_package_names.add(name)
+
     # ── Build entries per file ────────────────────────────────────────────────
     # file_path → group_label → raw entries
     raw_file_groups: dict[Path, dict[str, list[tuple[str, Path | None, FileKind, int | None]]]] = {}
@@ -382,6 +397,7 @@ def main(
                     maturity_period=maturity_period,
                     maturity_exclude_pat=maturity_exclude_pat,
                     package_modes=package_modes,
+                    local_package_names=local_package_names,
                     concurrency=concurrency,
                     on_progress=on_progress,
                 )
