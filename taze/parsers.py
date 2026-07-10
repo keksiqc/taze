@@ -81,6 +81,22 @@ def parse_pyproject(path: Path) -> dict[str, list[str]]:
     if uv_dev:
         groups["dev-dependencies"] = [d for d in uv_dev if isinstance(d, str)]
 
+    pdm_dev = data.get("tool", {}).get("pdm", {}).get("dev-dependencies", {})
+    if isinstance(pdm_dev, dict):
+        for name, dep_list in pdm_dev.items():
+            if isinstance(name, str) and isinstance(dep_list, list):
+                deps = [d for d in dep_list if isinstance(d, str)]
+                if deps:
+                    groups[f"pdm:{name}"] = deps
+
+    hatch_envs = data.get("tool", {}).get("hatch", {}).get("envs", {})
+    if isinstance(hatch_envs, dict):
+        for name, settings in hatch_envs.items():
+            if isinstance(name, str) and isinstance(settings, dict):
+                deps = [d for d in settings.get("dependencies", []) if isinstance(d, str)]
+                if deps:
+                    groups[f"hatch:{name}"] = deps
+
     return groups
 
 

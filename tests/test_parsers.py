@@ -123,6 +123,26 @@ class TestParsePyproject:
         groups = parse_pyproject(p)
         assert "dev-dependencies" in groups
 
+    def test_pdm_dev_dependencies(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [tool.pdm.dev-dependencies]
+            test = ["pytest>=7"]
+            """,
+        )
+        assert parse_pyproject(p)["pdm:test"] == ["pytest>=7"]
+
+    def test_hatch_environment_dependencies(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [tool.hatch.envs.test]
+            dependencies = ["pytest>=7"]
+            """,
+        )
+        assert parse_pyproject(p)["hatch:test"] == ["pytest>=7"]
+
     def test_empty_project(self, tmp_path) -> None:
         p = self._write(tmp_path, "[project]\nname = 'foo'\n")
         assert parse_pyproject(p) == {}
