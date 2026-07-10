@@ -90,6 +90,19 @@ class TestWritePyprojectUpdates:
         assert "requests>=3.0.0" in text
         assert "httpx>=0.27.0" in text
 
+    def test_respects_update_mode(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [project]
+            dependencies = ["requests>=2.0.0"]
+            """,
+        )
+        dep = _dep("requests>=2.0.0", "requests", "2.0.0", "3.0.0", ">=", "major")
+        count = write_pyproject_updates(p, {"dependencies": [dep]}, mode="patch")
+        assert count == 0
+        assert "requests>=2.0.0" in p.read_text()
+
 
 class TestWriteRequirementsUpdates:
     def _write(self, tmp_path: Path, content: str) -> Path:
@@ -135,3 +148,11 @@ class TestWriteRequirementsUpdates:
         dep.bump = "same"
         count = write_requirements_updates(p, [dep])
         assert count == 0
+
+    def test_respects_update_mode(self, tmp_path) -> None:
+        p = self._write(tmp_path, "requests>=2.0.0\n")
+        dep = self._req_dep("requests>=2.0.0", "requests", "2.0.0", "3.0.0", 1, ">=")
+        dep.bump = "major"
+        count = write_requirements_updates(p, [dep], mode="minor")
+        assert count == 0
+        assert p.read_text().strip() == "requests>=2.0.0"

@@ -154,6 +154,11 @@ class DepInfo:
         """Return True if a newer version is available and was fetched successfully."""
         return self.bump not in ("same", "?") and not self.fetch_error
 
+    @property
+    def is_locked(self) -> bool:
+        """Whether this dependency is an exact pin rather than a version range."""
+        return self.operator in ("==", "===")
+
     def is_shown(self, mode: str) -> bool:
         """True if this dep's update should be shown in the given mode."""
         if self.fetch_error:

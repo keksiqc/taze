@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
 import typer
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from taze.display import console, interactive_select, render_group, render_json
@@ -47,6 +49,8 @@ def resolve_deps(
     include_pat: re.Pattern[str] | None,
     exclude_pat: re.Pattern[str] | None,
     pre: bool,
+    mode: str,
+    include_locked: bool,
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
@@ -60,13 +64,25 @@ def resolve_deps(
             continue
         if exclude_pat and exclude_pat.match(info.name):
             continue
+        if info.is_locked and not include_locked:
+            continue
         infos.append(info)
 
     if not infos:
         return infos
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = {pool.submit(fetch_pypi_info, i.name, pre=pre, current_version=i.current): i for i in infos}
+        futures = {
+            pool.submit(
+                fetch_pypi_info,
+                i.name,
+                pre=pre,
+                current_version=i.current,
+                specifier=_resolution_specifier(i, mode=mode, include_locked=include_locked),
+                mode=mode,
+            ): i
+            for i in infos
+        }
         for fut in as_completed(futures):
             info = futures[fut]
             try:
@@ -82,6 +98,16 @@ def resolve_deps(
                 on_progress(1)
 
     return infos
+
+
+def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> SpecifierSet | None:
+    """Return the declared PEP 440 range that applies to the selected mode."""
+    if mode not in ("default", "stable") or (info.is_locked and include_locked):
+        return None
+    try:
+        return Requirement(info.raw).specifier
+    except Exception:
+        return None
 
 
 # ─── File discovery ───────────────────────────────────────────────────────────
@@ -167,6 +193,10 @@ def main(
     group: Annotated[
         bool,
         typer.Option("--group", help="Group dependencies by source file on display"),
+    ] = False,
+    include_locked: Annotated[
+        bool,
+        typer.Option("--include-locked", "-l", help="Include exact (==) version pins"),
     ] = False,
     sort: Annotated[
         str | None,
@@ -309,6 +339,8 @@ def main(
                     include_pat=include_pat,
                     exclude_pat=exclude_pat,
                     pre=pre,
+                    mode=mode,
+                    include_locked=include_locked,
                     concurrency=concurrency,
                     on_progress=on_progress,
                 )
@@ -388,10 +420,10 @@ def main(
                 filtered = groups
 
             if file_path.name == "pyproject.toml":
-                updated = write_pyproject_updates(file_path, filtered)
+                updated = write_pyproject_updates(file_path, filtered, mode=mode)
             else:
                 flat = [i for infos in filtered.values() for i in infos]
-                updated = write_requirements_updates(file_path, flat)
+                updated = write_requirements_updates(file_path, flat, mode=mode)
 
             if updated and not silent:
                 console.print(f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to [cyan]{file_path.name}[/]")

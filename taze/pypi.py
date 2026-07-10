@@ -5,6 +5,7 @@ import time
 import urllib.request
 from urllib.error import URLError
 
+from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 
@@ -17,6 +18,8 @@ def fetch_pypi_info(
     *,
     pre: bool = False,
     current_version: str | None = None,
+    specifier: SpecifierSet | None = None,
+    mode: str = "major",
 ) -> tuple[str | None, str | None, str | None]:
     """
     Return (latest_version, latest_release_date, current_release_date).
@@ -43,8 +46,10 @@ def fetch_pypi_info(
 
     current_date = _upload_date(releases, current_version) if current_version else None
 
-    # Fast path: trust info.version for stable-only queries
-    if not pre and info_version:
+    # The registry's ``info.version`` is sufficient only when no policy needs
+    # to inspect the release history. Range- and mode-aware resolution must
+    # consider every non-yanked release.
+    if not specifier and mode in ("major", "latest", "stable") and not pre and info_version:
         try:
             v = Version(info_version)
             if not v.is_prerelease and not v.is_devrelease:
@@ -52,7 +57,7 @@ def fetch_pypi_info(
         except InvalidVersion:
             pass
 
-    # Full scan — needed for --pre modes or when info.version is a pre-release
+    current = _as_version(current_version)
     best: Version | None = None
     for v_str, files in releases.items():
         if not files:
@@ -65,12 +70,36 @@ def fetch_pypi_info(
             continue
         if not pre and (v.is_prerelease or v.is_devrelease):
             continue
+        if specifier and not specifier.contains(v, prereleases=pre):
+            continue
+        if current and not _within_mode(v, current, mode):
+            continue
         if best is None or v > best:
             best = v
 
     if best is None:
         return None, None, current_date
     return str(best), _upload_date(releases, str(best)), current_date
+
+
+def _as_version(value: str | None) -> Version | None:
+    if not value:
+        return None
+    try:
+        return Version(value)
+    except InvalidVersion:
+        return None
+
+
+def _within_mode(candidate: Version, current: Version, mode: str) -> bool:
+    """Return whether a candidate stays within the requested update ceiling."""
+    if candidate <= current:
+        return True
+    if mode == "patch":
+        return candidate.major == current.major and candidate.minor == current.minor
+    if mode == "minor":
+        return candidate.major == current.major
+    return True
 
 
 def _upload_date(releases: dict, version: str | None) -> str | None:

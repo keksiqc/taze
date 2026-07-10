@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+from packaging.specifiers import SpecifierSet
+
 from taze.pypi import _upload_date, fetch_pypi_info
 
 
@@ -46,6 +48,26 @@ class TestFetchPypiInfo:
     def test_includes_prerelease_with_pre(self) -> None:
         version, _, _ = self._fetch(pre=True)
         assert version == "3.0.0a1"
+
+    def test_honours_declared_pep440_range(self) -> None:
+        version, _, _ = self._fetch(specifier=SpecifierSet(">=1.0,<2.0"), mode="default")
+        assert version == "1.1.0"
+
+    def test_minor_mode_stays_in_current_major(self) -> None:
+        version, _, _ = self._fetch(current_version="1.0.0", mode="minor")
+        assert version == "1.1.0"
+
+    def test_patch_mode_stays_in_current_minor(self) -> None:
+        data = {
+            "info": {"version": "1.2.0"},
+            "releases": {
+                "1.0.0": [{"upload_time": "2022-01-01T00:00:00", "yanked": False}],
+                "1.0.1": [{"upload_time": "2022-01-02T00:00:00", "yanked": False}],
+                "1.1.0": [{"upload_time": "2022-01-03T00:00:00", "yanked": False}],
+            },
+        }
+        version, _, _ = self._fetch(data=data, current_version="1.0.0", mode="patch")
+        assert version == "1.0.1"
 
     def test_skips_yanked_in_full_scan(self) -> None:
         # fast path trusts info.version; force full scan by leaving info.version empty

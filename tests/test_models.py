@@ -104,6 +104,10 @@ class TestDepInfoProperties:
         assert d.is_shown("minor") is False
         assert d.is_shown("patch") is False
 
+    def test_is_locked_for_exact_pin(self) -> None:
+        assert self._make(operator="==", current="1.0.0").is_locked is True
+        assert self._make(operator=">=", current="1.0.0").is_locked is False
+
     def test_updated_raw_eq(self) -> None:
         d = self._make(raw="requests==1.0.0", operator="==", current="1.0.0", latest="2.0.0")
         assert d.updated_raw() == "requests==2.0.0"

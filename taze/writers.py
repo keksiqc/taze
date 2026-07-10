@@ -10,14 +10,14 @@ if TYPE_CHECKING:
     from taze.models import DepInfo
 
 
-def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> int:
+def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]], *, mode: str = "major") -> int:
     """Replace outdated dep strings in pyproject.toml. Returns number of changes."""
     content = path.read_text(encoding="utf-8")
     count = 0
 
     for infos in all_infos.values():
         for info in infos:
-            if not info.is_outdated:
+            if not info.is_shown(mode):
                 continue
             new_raw = info.updated_raw()
             if new_raw == info.raw:
@@ -35,13 +35,13 @@ def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]]) -> 
     return count
 
 
-def write_requirements_updates(path: Path, infos: list[DepInfo]) -> int:
+def write_requirements_updates(path: Path, infos: list[DepInfo], *, mode: str = "major") -> int:
     """Update version specs in a requirements.txt file. Returns number of changes."""
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     count = 0
 
     for info in infos:
-        if not info.is_outdated or info.line_number is None:
+        if not info.is_shown(mode) or info.line_number is None:
             continue
         new_raw = info.updated_raw()
         if new_raw == info.raw:
