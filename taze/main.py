@@ -54,6 +54,8 @@ def resolve_deps(
     pre: bool,
     mode: str,
     include_locked: bool,
+    maturity_period: int,
+    maturity_exclude_pat: re.Pattern[str] | None,
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
 ) -> list[DepInfo]:
@@ -83,6 +85,7 @@ def resolve_deps(
                 current_version=i.current,
                 specifier=_resolution_specifier(i, mode=mode, include_locked=include_locked),
                 mode=mode,
+                maturity_period=0 if maturity_exclude_pat and maturity_exclude_pat.match(i.name) else maturity_period,
             ): i
             for i in infos
         }
@@ -205,6 +208,14 @@ def main(
         bool,
         typer.Option("--include-locked", "-l", help="Include exact (==) version pins"),
     ] = False,
+    maturity_period: Annotated[
+        int,
+        typer.Option("--maturity-period", help="Wait this many days before accepting a new release"),
+    ] = 0,
+    maturity_period_exclude: Annotated[
+        str | None,
+        typer.Option("--maturity-period-exclude", help="Packages exempt from the maturity policy"),
+    ] = None,
     sort: Annotated[
         str | None,
         typer.Option("--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"),
@@ -275,8 +286,16 @@ def main(
     ignore_other_workspaces = _configured(context, "ignore_other_workspaces", ignore_other_workspaces, project_config)
     include_locked = _configured(context, "include_locked", include_locked, project_config)
     concurrency = _configured(context, "concurrency", concurrency, project_config)
+    maturity_period = _configured(context, "maturity_period", maturity_period, project_config)
+    maturity_period_exclude = _configured(
+        context,
+        "maturity_period_exclude",
+        maturity_period_exclude,
+        project_config,
+    )
     include_pat = build_name_filter(include) if include else None
     exclude_pat = build_name_filter(exclude) if exclude else None
+    maturity_exclude_pat = build_name_filter(maturity_period_exclude) if maturity_period_exclude else None
 
     # ── Collect files ─────────────────────────────────────────────────────────
     ignored = _path_patterns(ignore_paths)
@@ -355,6 +374,8 @@ def main(
                     pre=pre,
                     mode=mode,
                     include_locked=include_locked,
+                    maturity_period=maturity_period,
+                    maturity_exclude_pat=maturity_exclude_pat,
                     concurrency=concurrency,
                     on_progress=on_progress,
                 )

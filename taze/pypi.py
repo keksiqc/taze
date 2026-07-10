@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
+from datetime import date
 from urllib.error import URLError
 
 from packaging.specifiers import SpecifierSet
@@ -20,6 +21,7 @@ def fetch_pypi_info(
     current_version: str | None = None,
     specifier: SpecifierSet | None = None,
     mode: str = "major",
+    maturity_period: int = 0,
 ) -> tuple[str | None, str | None, str | None]:
     """
     Return (latest_version, latest_release_date, current_release_date).
@@ -49,7 +51,7 @@ def fetch_pypi_info(
     # The registry's ``info.version`` is sufficient only when no policy needs
     # to inspect the release history. Range- and mode-aware resolution must
     # consider every non-yanked release.
-    if not specifier and mode in ("major", "latest", "stable") and not pre and info_version:
+    if not specifier and not maturity_period and mode in ("major", "latest", "stable") and not pre and info_version:
         try:
             v = Version(info_version)
             if not v.is_prerelease and not v.is_devrelease:
@@ -69,6 +71,8 @@ def fetch_pypi_info(
         except InvalidVersion:
             continue
         if not pre and (v.is_prerelease or v.is_devrelease):
+            continue
+        if maturity_period and not _is_mature(files, maturity_period):
             continue
         if specifier and not specifier.contains(v, prereleases=pre):
             continue
@@ -100,6 +104,20 @@ def _within_mode(candidate: Version, current: Version, mode: str) -> bool:
     if mode == "minor":
         return candidate.major == current.major
     return True
+
+
+def _is_mature(files: list[dict], period: int, *, today: date | None = None) -> bool:
+    """Whether a release has been available for at least ``period`` days."""
+    if period <= 0:
+        return True
+    published = _upload_date({"release": files}, "release")
+    if not published:
+        return False
+    try:
+        released = date.fromisoformat(published)
+    except ValueError:
+        return False
+    return ((today or date.today()) - released).days >= period
 
 
 def _upload_date(releases: dict, version: str | None) -> str | None:

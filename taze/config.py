@@ -15,6 +15,8 @@ CONFIG_KEYS = {
     "ignore_other_workspaces",
     "include_locked",
     "concurrency",
+    "maturity_period",
+    "maturity_period_exclude",
 }
 
 

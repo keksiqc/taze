@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 from packaging.specifiers import SpecifierSet
 
-from taze.pypi import _upload_date, fetch_pypi_info
+from taze.pypi import _is_mature, _upload_date, fetch_pypi_info
 
 
 FAKE_RELEASES = {
@@ -68,6 +69,20 @@ class TestFetchPypiInfo:
         }
         version, _, _ = self._fetch(data=data, current_version="1.0.0", mode="patch")
         assert version == "1.0.1"
+
+    def test_maturity_period_skips_recent_releases(self) -> None:
+        data = {
+            "info": {"version": "2.0.0"},
+            "releases": {
+                "1.0.0": [{"upload_time": "2024-01-01T00:00:00", "yanked": False}],
+                "2.0.0": [{"upload_time": "2024-01-15T00:00:00", "yanked": False}],
+            },
+        }
+        with patch("taze.pypi.date") as mock_date:
+            mock_date.today.return_value = date(2024, 1, 20)
+            mock_date.fromisoformat.side_effect = date.fromisoformat
+            version, _, _ = self._fetch(data=data, maturity_period=7)
+        assert version == "1.0.0"
 
     def test_skips_yanked_in_full_scan(self) -> None:
         # fast path trusts info.version; force full scan by leaving info.version empty
@@ -138,3 +153,13 @@ class TestUploadDate:
 
     def test_empty_files(self) -> None:
         assert _upload_date({"1.0.0": []}, "1.0.0") is None
+
+
+class TestMaturity:
+    def test_mature_release(self) -> None:
+        files = [{"upload_time": "2024-01-01T00:00:00"}]
+        assert _is_mature(files, 7, today=date(2024, 1, 8)) is True
+
+    def test_recent_release(self) -> None:
+        files = [{"upload_time": "2024-01-01T00:00:00"}]
+        assert _is_mature(files, 8, today=date(2024, 1, 8)) is False
