@@ -172,6 +172,7 @@ def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
                 }
                 for i in infos
             ]
+    console.print_json(data=output)
 
 
 def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:

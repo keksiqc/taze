@@ -413,7 +413,8 @@ def main(
             console.print(f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]")
             console.print()
 
-            for label, infos in groups.items():
+            display_groups = groups if group else {"dependencies": [i for infos in groups.values() for i in infos]}
+            for label, infos in display_groups.items():
                 if render_group(
                     label,
                     infos,
