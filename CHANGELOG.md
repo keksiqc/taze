@@ -1,3 +1,10 @@
+## 0.2.1 (2026-07-10)
+
+### Fix
+
+- update type hints for better type safety in main.py and test_models.py
+- move context parameter to main command
+
 ## 0.2.0 (2026-07-10)
 
 ### Feat

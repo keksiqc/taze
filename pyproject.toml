@@ -1,6 +1,6 @@
 [project]
 name = "taze"
-version = "0.2.0"
+version = "0.2.1"
 description = "🥬 Keep your Python deps fresh"
 readme = "README.md"
 requires-python = ">=3.14"
