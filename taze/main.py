@@ -13,6 +13,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from taze.config import load_config
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
+from taze.installers import install_command
 from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
 from taze.parsers import (
     build_name_filter,
@@ -450,7 +451,10 @@ def main(
 
     # ── Prompt to install after -w (unless -i/-u already set) ───────────────
     if write and not install and not update and not silent and total_written > 0:
-        console.print("  [dim]Run [cyan]uv sync[/] now? [bold](y/N)[/] [/]", end="")
+        command_text = " ".join(
+            install_command(next((fp.parent for fp in resolved if fp.name == "pyproject.toml"), root))
+        )
+        console.print(f"  [dim]Run [cyan]{command_text}[/] now? [bold](y/N)[/] [/]", end="")
         try:
             answer = input().strip().lower()
         except EOFError, KeyboardInterrupt:
@@ -459,25 +463,27 @@ def main(
         if answer == "y":
             install = True
 
-    # ── uv sync / install ────────────────────────────────────────────────────
+    # ── Lockfile-aware install ───────────────────────────────────────────────
     if install or update:
-        uv_cwd = next(
+        install_cwd = next(
             (fp.parent for fp in resolved if fp.name == "pyproject.toml"),
             root,
         )
+        command = install_command(install_cwd)
+        command_text = " ".join(command)
         if not silent:
-            console.print("  [dim]Running [cyan]uv sync[/]…[/]")
-        result = subprocess.run(
-            ["uv", "sync"],
-            cwd=uv_cwd,
+            console.print(f"  [dim]Running [cyan]{command_text}[/]…[/]")
+        result = subprocess.run(  # noqa: S603 -- command comes from the fixed installer registry
+            command,
+            cwd=install_cwd,
             capture_output=silent,
         )
         if result.returncode != 0:
             if not silent:
-                console.print("[red]✗[/]  [bold]uv sync[/] failed")
+                console.print(f"[red]✗[/]  [bold]{command_text}[/] failed")
             raise typer.Exit(result.returncode)
         if not silent:
-            console.print("  [green]✓[/]  [bold]uv sync[/] complete")
+            console.print(f"  [green]✓[/]  [bold]{command_text}[/] complete")
             console.print()
 
     raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
