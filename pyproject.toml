@@ -15,6 +15,7 @@ taze = "taze.main:app"
 
 [dependency-groups]
 dev = [
+  "commitizen>=4.16.4",
   "prek>=0.4.5",
   "pytest>=9.1.1",
   "ruff>=0.15.19",
@@ -67,3 +68,11 @@ lines-after-imports = 2
 docstring-code-format = true
 indent-style = "space"
 quote-style = "double"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "pep440"
+version_provider = "uv"
+update_changelog_on_bump = true
+major_version_zero = true
