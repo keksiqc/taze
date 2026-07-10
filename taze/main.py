@@ -233,7 +233,7 @@ def main(
         ),
     ] = False,
     silent: Annotated[bool, typer.Option("--silent", "-s", help="No output")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output", hidden=True)] = False,
+    output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output")] = False,
     version: Annotated[
         bool,
         typer.Option("--version", "-v", help="Show version and exit", is_eager=True),
