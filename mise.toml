@@ -1,0 +1,28 @@
+[tools]
+python = "3.14"
+
+[settings.python]
+uv_venv_auto = "create|source"
+
+[hooks]
+enter = "prek install"
+
+[tasks.test]
+description = "Run tests"
+run = "pytest"
+
+[tasks.check]
+description = "Run all checks"
+run = ["ruff format", "ruff check", "ty check",]
+
+[tasks.prek]
+description = "Run pre-commit hooks"
+run = "prek run --all-files"
+
+[tasks."prek:install"]
+description = "Install pre-commit hooks"
+run = "prek install"
+
+[tasks."prek:update"]
+description = "Update pre-commit hooks"
+run = "prek update --freeze"

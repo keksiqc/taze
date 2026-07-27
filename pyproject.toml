@@ -16,7 +16,6 @@ taze = "taze.main:app"
 [dependency-groups]
 dev = [
   "commitizen>=4.16.5",
-  "poethepoet>=0.48.0",
   "prek>=0.4.11",
   "pytest>=9.1.1",
   "ruff>=0.16.0",
@@ -34,14 +33,6 @@ version_scheme = "pep440"
 version_provider = "uv"
 update_changelog_on_bump = true
 major_version_zero = true
-
-[tool.poe.tasks]
-test = "pytest"
-fmt = "ruff format"
-lint = "ruff check"
-types = "ty check"
-check = ["fmt", "lint", "types"]
-prek = "prek run --all-files"
 
 [tool.pytest.ini_options]
 cache_dir = ".cache/pytest"
