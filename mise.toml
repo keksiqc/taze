@@ -13,7 +13,11 @@ run = "pytest"
 
 [tasks.check]
 description = "Run all checks"
-run = ["ruff format", "ruff check", "ty check",]
+run = [
+  "ruff format",
+  "ruff check",
+  "ty check",
+]
 
 [tasks.prek]
 description = "Run pre-commit hooks"

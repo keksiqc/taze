@@ -1,3 +1,15 @@
+## 0.2.3 (2026-07-27)
+
+### Fix
+
+- format hooks in prek.toml for improved readability
+- replace date with datetime for accurate date handling
+- add poethepoet
+
+### Refactor
+
+- simplify dependency handling by removing unused parameters and updating data structures
+
 ## 0.2.2 (2026-07-27)
 
 ### Fix

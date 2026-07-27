@@ -1,6 +1,6 @@
 [project]
 name = "taze"
-version = "0.2.2"
+version = "0.2.3"
 description = "🥬 Keep your Python deps fresh"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -29,6 +29,10 @@ build-backend = "uv_build"
 [tool.commitizen]
 name = "cz_conventional_commits"
 tag_format = "$version"
+version_files = [
+  "pyproject.toml",
+  "taze/main.py",
+]
 version_scheme = "pep440"
 version_provider = "uv"
 update_changelog_on_bump = true
