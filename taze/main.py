@@ -543,7 +543,7 @@ def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -
     return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
 
 
-def _configured(context: typer.Context, name: str, current: T, config: dict[str, object]) -> T:
+def _configured[T](context: typer.Context, name: str, current: T, config: dict[str, object]) -> T:
     """Use the project setting only when the corresponding CLI option was omitted."""
     if name not in config:
         return current
