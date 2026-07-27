@@ -31,7 +31,7 @@ name = "cz_conventional_commits"
 tag_format = "$version"
 version_files = [
   "pyproject.toml",
-  "taze/main.py",
+  "taze/__init__.py",
 ]
 version_scheme = "pep440"
 version_provider = "uv"

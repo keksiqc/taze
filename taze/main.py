@@ -10,6 +10,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
+from taze import __version__
 from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
@@ -33,8 +34,6 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-
-__version__ = "0.1.1"
 
 app = typer.Typer(
     name="taze",

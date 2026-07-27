@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from taze.main import __version__
 
+__version__ = "0.2.3"
 
 __all__ = ["__version__"]

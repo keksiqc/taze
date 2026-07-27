@@ -9,8 +9,10 @@ from urllib.error import URLError
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from taze import __version__
 
-_USER_AGENT = "taze/0.1.1 (https://github.com/keksiqc/taze)"
+
+_USER_AGENT = f"taze/{__version__} (https://github.com/keksiqc/taze)"
 _RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts 1→2 and 2→3
 
 
