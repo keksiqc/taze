@@ -24,14 +24,29 @@ hooks = [
 [[repos]]
 repo = "https://github.com/commitizen-tools/commitizen"
 rev = "6afcd8e9560ddf1b9a5032262a0be26540e85fb3"  # frozen: v4.16.5
-hooks = [{ id = "commitizen" }, { id = "commitizen-branch" }]
+hooks = [
+  { id = "commitizen" },
+  { id = "commitizen-branch" },
+]
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
 rev = "e3e6ef7d9bda544b2e795782dbd7d2a4fbd7eb6d"  # frozen: 0.11.32
-hooks = [{ id = "uv-lock" }]
+hooks = [
+  { id = "uv-lock" },
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/ty-pre-commit"
+rev = "73d9ef74d17f01127e8a495a7e77ce9941aae703"  # frozen: v0.0.63
+hooks = [
+  { id = "ty" },
+]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
 rev = "cb8c523fd4835aba42af70f4cad5568db4df0b6c"  # frozen: v0.16.0
-hooks = [{ id = "ruff-check", args = ["--fix"] }, { id = "ruff-format" }]
+hooks = [
+  { id = "ruff-format" },
+  { id = "ruff-check", args = ["--fix"] },
+]
