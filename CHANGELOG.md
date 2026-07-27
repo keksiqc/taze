@@ -1,3 +1,9 @@
+## 0.2.4 (2026-07-27)
+
+### Refactor
+
+- update version handling by moving __version__ to __init__.py and adjusting user agent string
+
 ## 0.2.3 (2026-07-27)
 
 ### Fix
