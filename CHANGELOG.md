@@ -1,3 +1,11 @@
+## 0.2.2 (2026-07-27)
+
+### Fix
+
+- streamline publish workflow by consolidating jobs and removing unnecessary steps
+- update repository revisions and add update section in prek.toml
+- add type parameter to _configured function for better type inference
+
 ## 0.2.1 (2026-07-10)
 
 ### Fix
