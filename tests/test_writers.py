@@ -3,7 +3,7 @@ from __future__ import annotations
 import textwrap
 from typing import TYPE_CHECKING
 
-from taze.models import DepInfo, FileKind
+from taze.models import DepInfo
 from taze.writers import write_pyproject_updates, write_requirements_updates
 
 
@@ -19,7 +19,6 @@ def _dep(raw: str, name: str, current: str, latest: str, operator: str = ">=", b
         operator=operator,
         latest=latest,
         bump=bump,
-        file_kind=FileKind.PYPROJECT,
     )
 
 
@@ -113,7 +112,6 @@ class TestWriteRequirementsUpdates:
     def _req_dep(self, raw: str, name: str, current: str, latest: str, lineno: int, operator: str = ">=") -> DepInfo:
         d = _dep(raw, name, current, latest, operator)
         d.line_number = lineno
-        d.file_kind = FileKind.REQUIREMENTS
         return d
 
     def test_updates_line(self, tmp_path) -> None:

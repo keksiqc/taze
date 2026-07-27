@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from packaging.requirements import InvalidRequirement, Requirement
 
-from taze.models import DepInfo, FileKind
+from taze.models import DepInfo
 
 
 if TYPE_CHECKING:
@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 def parse_dep_string(
     raw: str,
     *,
-    source_file: Path | None = None,
-    file_kind: FileKind = FileKind.PYPROJECT,
     line_number: int | None = None,
 ) -> DepInfo | None:
     """Parse a raw dependency string into a DepInfo, or None if it should be skipped."""
@@ -52,8 +50,6 @@ def parse_dep_string(
         name=name,
         current=current,
         operator=operator,
-        source_file=source_file,
-        file_kind=file_kind,
         line_number=line_number,
     )
 

@@ -3,18 +3,18 @@ from __future__ import annotations
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Annotated, TypeVar, cast
 
 import typer
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
 from taze.installers import install_command
-from taze.models import MODE_SETTINGS, MODES, DepInfo, FileKind, calc_bump
+from taze.models import MODES, PRE_RELEASE_MODES, DepInfo, calc_bump
 from taze.parsers import (
     build_name_filter,
     parse_dep_string,
@@ -51,7 +51,7 @@ SORT_CHOICES = ("name-asc", "name-desc", "diff-asc", "diff-desc")
 
 
 def resolve_deps(
-    entries: list[tuple[str, Path | None, FileKind, int | None]],
+    entries: list[tuple[str, int | None]],
     *,
     include_pat: re.Pattern[str] | None,
     exclude_pat: re.Pattern[str] | None,
@@ -67,8 +67,8 @@ def resolve_deps(
 ) -> list[DepInfo]:
     """Fetch latest PyPI info for all deps and return enriched DepInfo list."""
     infos: list[DepInfo] = []
-    for raw, src, kind, lineno in entries:
-        info = parse_dep_string(raw, source_file=src, file_kind=kind, line_number=lineno)
+    for raw, lineno in entries:
+        info = parse_dep_string(raw, line_number=lineno)
         if info is None:
             continue
         if include_pat and not include_pat.match(info.name):
@@ -285,7 +285,7 @@ def main(
     if interactive:
         write = True
 
-    _, pre = MODE_SETTINGS[mode]
+    pre = mode in PRE_RELEASE_MODES
 
     root = (cwd or Path()).resolve()
     config_path = (root / config).resolve() if config and not config.is_absolute() else config
@@ -336,7 +336,7 @@ def main(
 
     # ── Build entries per file ────────────────────────────────────────────────
     # file_path → group_label → raw entries
-    raw_file_groups: dict[Path, dict[str, list[tuple[str, Path | None, FileKind, int | None]]]] = {}
+    raw_file_groups: dict[Path, dict[str, list[tuple[str, int | None]]]] = {}
 
     for file_path in target_files:
         if file_path.name == "pyproject.toml":
@@ -346,9 +346,7 @@ def main(
                 if not silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
-            raw_file_groups[file_path] = {
-                label: [(s, file_path, FileKind.PYPROJECT, None) for s in deps] for label, deps in raw_groups.items()
-            }
+            raw_file_groups[file_path] = {label: [(s, None) for s in deps] for label, deps in raw_groups.items()}
         else:
             try:
                 pairs = parse_requirements_file(file_path)
@@ -357,7 +355,7 @@ def main(
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
-                "requirements": [(s, file_path, FileKind.REQUIREMENTS, ln) for ln, s in pairs],
+                "requirements": [(s, ln) for ln, s in pairs],
             }
 
     if not raw_file_groups:
@@ -368,24 +366,19 @@ def main(
     # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
-    progress_ctx = (
-        Progress(
-            TextColumn("[dim]Checking packages on PyPI…[/]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TimeElapsedColumn(),
-            console=console,
-            transient=True,
-        )
-        if not silent
-        else _NullCtx()
-    )
-    with progress_ctx as _progress:
-        task_id = _progress.add_task("checking", total=total_packages)
+    with Progress(
+        TextColumn("[dim]Checking packages on PyPI…[/]"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+        disable=silent,
+    ) as progress:
+        task_id = progress.add_task("checking", total=total_packages)
 
         def on_progress(n: int) -> None:
-            if not silent:
-                _progress.update(task_id, advance=n)
+            progress.update(task_id, advance=n)
 
         for file_path, groups in raw_file_groups.items():
             resolved[file_path] = {}
@@ -564,29 +557,8 @@ def _path_patterns(value: object) -> tuple[str, ...]:
     return ()
 
 
-class _NullCtx:
-    """No-op context manager (replaces console.status when --silent)."""
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        pass
-
-    def add_task(self, _description: str, *, total: int) -> TaskID:
-        return TaskID(0)
-
-    def update(self, _task_id: TaskID, *, advance: int) -> None:
-        pass
-
-
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 
-def run() -> None:
-    """Entry point for the taze CLI."""
-    app()
-
-
 if __name__ == "__main__":
-    run()
+    app()

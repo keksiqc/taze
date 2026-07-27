@@ -2,15 +2,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import InvalidVersion, Version
-
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?": -1}
@@ -30,32 +24,8 @@ BUMP_BADGE: dict[str, str] = {
     "?": "[dim]?[/]",
 }
 
-# Mode → (min_bump_level, include_pre)
-# min_bump_level: only show updates at this level or above
-MODE_SETTINGS: dict[str, tuple[str, bool]] = {
-    "default": ("patch", False),
-    "major": ("patch", False),
-    "latest": ("patch", False),
-    "stable": ("patch", False),
-    "minor": ("patch", False),  # filter applied post-fetch
-    "patch": ("patch", False),  # filter applied post-fetch
-    "newest": ("patch", True),
-    "next": ("patch", True),
-}
-
-MODES = list(MODE_SETTINGS)
-
-# Which bump levels each mode actually shows
-MODE_MIN_BUMP: dict[str, str] = {
-    "default": "patch",
-    "major": "patch",
-    "latest": "patch",
-    "stable": "patch",
-    "newest": "patch",
-    "next": "patch",
-    "minor": "patch",  # no major bumps
-    "patch": "patch",  # no minor or major bumps
-}
+MODES = ("default", "major", "latest", "stable", "minor", "patch", "newest", "next")
+PRE_RELEASE_MODES = {"newest", "next"}
 
 MODE_SHOWS_MAJOR: dict[str, bool] = {
     "major": True,
@@ -77,13 +47,6 @@ MODE_SHOWS_MINOR: dict[str, bool] = {
     "minor": True,
     "patch": False,
 }
-
-
-class FileKind(StrEnum):
-    """Source file type for a parsed dependency entry."""
-
-    PYPROJECT = "pyproject"
-    REQUIREMENTS = "requirements"
 
 
 def calc_bump(current: str | None, latest: str | None) -> str:
@@ -121,8 +84,6 @@ class DepInfo:
     name: str
     current: str | None
     operator: str | None
-    source_file: Path | None = None
-    file_kind: FileKind = FileKind.PYPROJECT
     line_number: int | None = None
     latest: str | None = None
     release_date: str | None = None  # ISO date of latest release

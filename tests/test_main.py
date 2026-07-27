@@ -3,13 +3,12 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from taze.main import resolve_deps
-from taze.models import FileKind
 
 
 def test_resolve_deps_skips_local_workspace_packages() -> None:
     with patch("taze.main.fetch_pypi_info") as fetch:
         resolved = resolve_deps(
-            [("shared-lib>=1.0", None, FileKind.PYPROJECT, None)],
+            [("shared-lib>=1.0", None)],
             include_pat=None,
             exclude_pat=None,
             pre=False,
