@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from packaging.requirements import Requirement
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import InvalidVersion, Version
 
 
@@ -175,7 +175,7 @@ class DepInfo:
             return self.raw
         try:
             Requirement(self.raw)
-        except Exception:
+        except InvalidRequirement:
             return self.raw
 
         if not self.current:

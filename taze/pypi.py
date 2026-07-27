@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.request
-from datetime import date
+from datetime import UTC, date, datetime
 from urllib.error import URLError
 
 from packaging.specifiers import SpecifierSet
@@ -117,7 +117,7 @@ def _is_mature(files: list[dict], period: int, *, today: date | None = None) -> 
         released = date.fromisoformat(published)
     except ValueError:
         return False
-    return ((today or date.today()) - released).days >= period
+    return ((today or datetime.now(tz=UTC).date()) - released).days >= period
 
 
 def _upload_date(releases: dict, version: str | None) -> str | None:

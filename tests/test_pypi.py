@@ -78,9 +78,8 @@ class TestFetchPypiInfo:
                 "2.0.0": [{"upload_time": "2024-01-15T00:00:00", "yanked": False}],
             },
         }
-        with patch("taze.pypi.date") as mock_date:
-            mock_date.today.return_value = date(2024, 1, 20)
-            mock_date.fromisoformat.side_effect = date.fromisoformat
+        with patch("taze.pypi.datetime") as mock_datetime:
+            mock_datetime.now.return_value.date.return_value = date(2024, 1, 20)
             version, _, _ = self._fetch(data=data, maturity_period=7)
         assert version == "1.0.0"
 

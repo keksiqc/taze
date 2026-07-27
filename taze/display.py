@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from rich import box
 from rich.console import Console
@@ -19,7 +19,7 @@ def _age(release_date: str | None) -> str:
     if not release_date:
         return ""
     try:
-        days = (date.today() - date.fromisoformat(release_date)).days
+        days = (datetime.now(tz=UTC).date() - date.fromisoformat(release_date)).days
     except ValueError:
         return ""
     if days < 1:
@@ -35,7 +35,7 @@ def _age_color(release_date: str | None) -> str:
     if not release_date:
         return "dim"
     try:
-        days = (date.today() - date.fromisoformat(release_date)).days
+        days = (datetime.now(tz=UTC).date() - date.fromisoformat(release_date)).days
     except ValueError:
         return "dim"
     if days < 28:

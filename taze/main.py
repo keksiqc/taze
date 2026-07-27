@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self, TypeVar, cast
 
 import typer
-from packaging.requirements import Requirement
+from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
@@ -108,7 +108,7 @@ def resolve_deps(
                 info.release_date = latest_date
                 info.current_release_date = current_date
                 info.fetch_error = version is None
-            except Exception:
+            except AttributeError, OSError, TypeError, ValueError:
                 info.fetch_error = True
             info.bump = calc_bump(info.current, info.latest)
             if on_progress is not None:
@@ -123,7 +123,7 @@ def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> 
         return None
     try:
         return Requirement(info.raw).specifier
-    except Exception:
+    except InvalidRequirement:
         return None
 
 
@@ -329,7 +329,7 @@ def main(
             continue
         try:
             name = parse_project_name(file_path)
-        except Exception:
+        except AttributeError, OSError, TypeError, ValueError:
             name = None
         if name:
             local_package_names.add(name)
@@ -342,7 +342,7 @@ def main(
         if file_path.name == "pyproject.toml":
             try:
                 raw_groups = parse_pyproject(file_path)
-            except Exception as e:
+            except (AttributeError, OSError, TypeError, ValueError) as e:
                 if not silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
@@ -352,7 +352,7 @@ def main(
         else:
             try:
                 pairs = parse_requirements_file(file_path)
-            except Exception as e:
+            except (OSError, UnicodeError) as e:
                 if not silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
@@ -520,10 +520,11 @@ def main(
         command_text = " ".join(command)
         if not silent:
             console.print(f"  [dim]Running [cyan]{command_text}[/]…[/]")
-        result = subprocess.run(  # noqa: S603 -- command comes from the fixed installer registry
+        result = subprocess.run(
             command,
             cwd=install_cwd,
             capture_output=silent,
+            check=False,
         )
         if result.returncode != 0:
             if not silent:
