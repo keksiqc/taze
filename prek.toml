@@ -20,15 +20,15 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/commitizen-tools/commitizen"
-rev = "v4.16.4"
+rev = "v4.16.5"
 hooks = [{ id = "commitizen" }, { id = "commitizen-branch" }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.11.24"
+rev = "0.11.32"
 hooks = [{ id = "uv-lock" }]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.19"
+rev = "v0.16.0"
 hooks = [{ id = "ruff-check", args = ["--fix"] }, { id = "ruff-format" }]
