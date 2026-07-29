@@ -106,19 +106,6 @@ def parse_project_name(path: Path) -> str | None:
     return name.lower().replace("_", "-")
 
 
-def parse_requirements_file(path: Path) -> list[tuple[int, str]]:
-    """Return (line_number, dep_string) pairs from a requirements file."""
-    result: list[tuple[int, str]] = []
-    for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        stripped = line.strip()
-        if not stripped or stripped.startswith(("#", "-")):
-            continue
-        dep = re.sub(r"\s+#.*$", "", stripped).strip()
-        if dep:
-            result.append((i, dep))
-    return result
-
-
 def build_name_filter(pattern: str) -> re.Pattern[str] | None:
     """
     Build a compiled regex from a comma-separated list.

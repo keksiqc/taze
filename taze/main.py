@@ -21,7 +21,6 @@ from taze.parsers import (
     parse_dep_string,
     parse_project_name,
     parse_pyproject,
-    parse_requirements_file,
 )
 from taze.pypi import fetch_pypi_info
 from taze.writers import write_pyproject_updates, write_requirements_updates
@@ -348,13 +347,17 @@ def main(
             raw_file_groups[file_path] = {label: [(s, None) for s in deps] for label, deps in raw_groups.items()}
         else:
             try:
-                pairs = parse_requirements_file(file_path)
+                lines = file_path.read_text(encoding="utf-8").splitlines()
             except (OSError, UnicodeError) as e:
                 if not silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
-                "requirements": [(s, ln) for ln, s in pairs],
+                "requirements": [
+                    (line, lineno)
+                    for lineno, line in enumerate(lines, 1)
+                    if line.strip() and not line.lstrip().startswith(("#", "-"))
+                ],
             }
 
     if not raw_file_groups:

@@ -8,7 +8,6 @@ from taze.parsers import (
     parse_dep_string,
     parse_project_name,
     parse_pyproject,
-    parse_requirements_file,
 )
 
 
@@ -151,36 +150,6 @@ class TestParsePyproject:
     def test_project_name_is_normalised(self, tmp_path) -> None:
         p = self._write(tmp_path, "[project]\nname = 'My_Package'\n")
         assert parse_project_name(p) == "my-package"
-
-
-class TestParseRequirementsFile:
-    def _write(self, tmp_path: Path, content: str) -> Path:
-        p = tmp_path / "requirements.txt"
-        p.write_text(textwrap.dedent(content))
-        return p
-
-    def test_basic(self, tmp_path) -> None:
-        p = self._write(tmp_path, "requests==2.28.0\nhttpx>=0.24\n")
-        pairs = parse_requirements_file(p)
-        assert len(pairs) == 2
-        assert pairs[0] == (1, "requests==2.28.0")
-        assert pairs[1] == (2, "httpx>=0.24")
-
-    def test_skips_comments_and_blank(self, tmp_path) -> None:
-        p = self._write(tmp_path, "# header\n\nrequests==2.28.0\n")
-        pairs = parse_requirements_file(p)
-        assert len(pairs) == 1
-        assert pairs[0][0] == 3
-
-    def test_skips_dash_flags(self, tmp_path) -> None:
-        p = self._write(tmp_path, "-r base.txt\nrequests==2.28.0\n")
-        pairs = parse_requirements_file(p)
-        assert len(pairs) == 1
-
-    def test_strips_inline_comment(self, tmp_path) -> None:
-        p = self._write(tmp_path, "requests==2.28.0  # pinned\n")
-        pairs = parse_requirements_file(p)
-        assert pairs[0][1] == "requests==2.28.0"
 
 
 class TestBuildNameFilter:
