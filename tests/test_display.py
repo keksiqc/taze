@@ -31,3 +31,9 @@ def test_sort_infos_by_bump() -> None:
     ]
     display._sort_infos(infos, "diff-desc")
     assert [info.name for info in infos] == ["b", "a"]
+
+
+def test_interactive_select_accepts_numbers_and_ranges(monkeypatch) -> None:
+    infos = [DepInfo(str(i), str(i), None, None) for i in range(1, 5)]
+    monkeypatch.setattr("builtins.input", lambda: "1,3-4")
+    assert display.interactive_select(infos) == [infos[0], infos[2], infos[3]]

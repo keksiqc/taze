@@ -201,22 +201,11 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
 
     selected: list[DepInfo] = []
     for token in raw.split(","):
-        token = token.strip()
-        if "-" in token:
-            parts = token.split("-", 1)
-            try:
-                lo, hi = int(parts[0]), int(parts[1])
-                for i in range(lo, hi + 1):
-                    if 1 <= i <= len(outdated):
-                        selected.append(outdated[i - 1])
-            except ValueError:
-                pass
-        else:
-            try:
-                i = int(token)
-                if 1 <= i <= len(outdated):
-                    selected.append(outdated[i - 1])
-            except ValueError:
-                pass
+        lo, separator, hi = token.strip().partition("-")
+        try:
+            indices = range(int(lo), int(hi) + 1) if separator else (int(lo),)
+        except ValueError:
+            continue
+        selected.extend(outdated[i - 1] for i in indices if 1 <= i <= len(outdated))
 
     return selected
