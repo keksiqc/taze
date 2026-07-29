@@ -22,3 +22,12 @@ def test_render_json_prints_machine_readable_output(monkeypatch) -> None:
     display.render_json({"pyproject.toml": {"dependencies": [info]}})
     output = json.loads(console.export_text())
     assert output["pyproject.toml"]["dependencies"][0]["latest"] == "2.1"
+
+
+def test_sort_infos_by_bump() -> None:
+    infos = [
+        DepInfo("a>=1", "a", "1", ">=", bump="patch"),
+        DepInfo("b>=1", "b", "1", ">=", bump="major"),
+    ]
+    display._sort_infos(infos, "diff-desc")
+    assert [info.name for info in infos] == ["b", "a"]

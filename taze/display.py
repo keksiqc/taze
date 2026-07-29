@@ -8,7 +8,7 @@ from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
-from taze.models import BUMP_BADGE, BUMP_COLOR, DepInfo
+from taze.models import BUMP_BADGE, BUMP_COLOR, BUMP_ORDER, DepInfo
 
 
 console = Console()
@@ -60,7 +60,7 @@ def render_group(
         return False
 
     if sort:
-        _sort_infos(visible, sort, mode)
+        _sort_infos(visible, sort)
 
     outdated = sum(1 for i in infos if i.is_shown(mode))
 
@@ -139,17 +139,9 @@ def render_group(
     return True
 
 
-def _sort_infos(infos: list[DepInfo], sort: str, mode: str) -> None:
-    from taze.models import BUMP_ORDER
-
-    if sort == "name-asc":
-        infos.sort(key=lambda i: i.name)
-    elif sort == "name-desc":
-        infos.sort(key=lambda i: i.name, reverse=True)
-    elif sort == "diff-asc":
-        infos.sort(key=lambda i: BUMP_ORDER.get(i.bump, -1))
-    elif sort == "diff-desc":
-        infos.sort(key=lambda i: BUMP_ORDER.get(i.bump, -1), reverse=True)
+def _sort_infos(infos: list[DepInfo], sort: str) -> None:
+    key = (lambda i: i.name) if sort.startswith("name") else lambda i: BUMP_ORDER.get(i.bump, -1)
+    infos.sort(key=key, reverse=sort.endswith("desc"))
 
 
 def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
