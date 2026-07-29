@@ -23,7 +23,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/commitizen-tools/commitizen"
-rev = "6afcd8e9560ddf1b9a5032262a0be26540e85fb3"  # frozen: v4.16.5
+rev = "93c7b51d860138c34a0613756c0151209b88d56f"  # frozen: v4.17.0
 hooks = [
   { id = "commitizen" },
   { id = "commitizen-branch" },
@@ -31,14 +31,14 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "e3e6ef7d9bda544b2e795782dbd7d2a4fbd7eb6d"  # frozen: 0.11.32
+rev = "5900cba2cfe6d20f562458d4d308ac55569f92eb"  # frozen: 0.12.0
 hooks = [
   { id = "uv-lock" },
 ]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ty-pre-commit"
-rev = "73d9ef74d17f01127e8a495a7e77ce9941aae703"  # frozen: v0.0.63
+rev = "3940f891290063e0fde330228f5bff73e18ad2f2"  # frozen: v0.0.64
 hooks = [
   { id = "ty" },
 ]

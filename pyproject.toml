@@ -15,15 +15,15 @@ taze = "taze.main:app"
 
 [dependency-groups]
 dev = [
-  "commitizen>=4.16.5",
+  "commitizen>=4.17.0",
   "prek>=0.4.11",
   "pytest>=9.1.1",
   "ruff>=0.16.0",
-  "ty>=0.0.63",
+  "ty>=0.0.64",
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.32,<0.12"]
+requires = ["uv_build>=0.12.0,<0.13"]
 build-backend = "uv_build"
 
 [tool.commitizen]
