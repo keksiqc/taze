@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 from rich.console import Console
 
 from taze import display
 from taze.models import DepInfo
+
+
+def test_age_returns_text_and_color() -> None:
+    today = datetime.now(tz=UTC).date().isoformat()
+    assert display._age(today) == ("~0d", "green")
 
 
 def test_render_json_prints_machine_readable_output(monkeypatch) -> None:

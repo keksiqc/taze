@@ -14,35 +14,24 @@ from taze.models import BUMP_BADGE, BUMP_COLOR, BUMP_ORDER, DepInfo
 console = Console()
 
 
-def _age(release_date: str | None) -> str:
-    """Return a compact age string like ~2mo, ~3d, ~1y, or empty string."""
+def _age(release_date: str | None) -> tuple[str, str]:
+    """Return compact release age text and its display color."""
     if not release_date:
-        return ""
+        return "", "dim"
     try:
         days = (datetime.now(tz=UTC).date() - date.fromisoformat(release_date)).days
     except ValueError:
-        return ""
+        return "", "dim"
     if days < 1:
-        return "~0d"
-    if days < 30:
-        return f"~{days}d"
-    if days < 365:
-        return f"~{days // 30}mo"
-    return f"~{days // 365}y"
-
-
-def _age_color(release_date: str | None) -> str:
-    if not release_date:
-        return "dim"
-    try:
-        days = (datetime.now(tz=UTC).date() - date.fromisoformat(release_date)).days
-    except ValueError:
-        return "dim"
-    if days < 28:
-        return "green"
-    if days < 180:
-        return "yellow"
-    return "red"
+        age = "~0d"
+    elif days < 30:
+        age = f"~{days}d"
+    elif days < 365:
+        age = f"~{days // 30}mo"
+    else:
+        age = f"~{days // 365}y"
+    color = "green" if days < 28 else "yellow" if days < 180 else "red"
+    return age, color
 
 
 def render_group(
@@ -74,11 +63,8 @@ def render_group(
 
     name_width = max(max((len(i.name) for i in visible), default=0), col_widths[0])
     spec_width = max(max((len(i.current_spec) for i in visible), default=0), col_widths[1])
-    cur_age_width = max(
-        max((len(_age(i.current_release_date)) for i in visible), default=0),
-        col_widths[2],
-    )
-    lat_age_width = max(max((len(_age(i.release_date)) for i in visible), default=0), col_widths[3])
+    cur_age_width = max(max((len(_age(i.current_release_date)[0]) for i in visible), default=0), col_widths[2])
+    lat_age_width = max(max((len(_age(i.release_date)[0]) for i in visible), default=0), col_widths[3])
     latest_spec_width = max(max((len(i.latest_spec) for i in visible), default=0), col_widths[4])
 
     table = Table(
@@ -99,10 +85,8 @@ def render_group(
     for info in visible:
         color = BUMP_COLOR.get(info.bump, "dim")
         badge = BUMP_BADGE.get(info.bump, "")
-        cur_age = _age(info.current_release_date)
-        lat_age = _age(info.release_date)
-        cur_age_color = _age_color(info.current_release_date)
-        lat_age_color = _age_color(info.release_date)
+        cur_age, cur_age_color = _age(info.current_release_date)
+        lat_age, lat_age_color = _age(info.release_date)
 
         if info.fetch_error:
             table.add_row(

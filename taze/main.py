@@ -425,8 +425,8 @@ def main(
             col_widths = (
                 max((len(i.name) for i in all_infos), default=0),
                 max((len(i.current_spec) for i in all_infos), default=0),
-                max((len(_age(i.current_release_date)) for i in all_infos), default=0),
-                max((len(_age(i.release_date)) for i in all_infos), default=0),
+                max((len(_age(i.current_release_date)[0]) for i in all_infos), default=0),
+                max((len(_age(i.release_date)[0]) for i in all_infos), default=0),
                 max((len(i.latest_spec) for i in all_infos), default=0),
             )
 
