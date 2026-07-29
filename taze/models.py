@@ -27,26 +27,7 @@ BUMP_BADGE: dict[str, str] = {
 MODES = ("default", "major", "latest", "stable", "minor", "patch", "newest", "next")
 PRE_RELEASE_MODES = {"newest", "next"}
 
-MODE_SHOWS_MAJOR: dict[str, bool] = {
-    "major": True,
-    "default": True,
-    "latest": True,
-    "stable": True,
-    "newest": True,
-    "next": True,
-    "minor": False,
-    "patch": False,
-}
-MODE_SHOWS_MINOR: dict[str, bool] = {
-    "major": True,
-    "default": True,
-    "latest": True,
-    "stable": True,
-    "newest": True,
-    "next": True,
-    "minor": True,
-    "patch": False,
-}
+MODE_CEILING = {"minor": 2, "patch": 1}
 
 
 def calc_bump(current: str | None, latest: str | None) -> str:
@@ -69,11 +50,7 @@ def calc_bump(current: str | None, latest: str | None) -> str:
 
 def bump_allowed(bump: str, mode: str) -> bool:
     """Return True if this bump level should be shown/updated in the given mode."""
-    if bump in ("same", "?"):
-        return False
-    if bump == "major" and not MODE_SHOWS_MAJOR.get(mode, True):
-        return False
-    return not (bump == "minor" and not MODE_SHOWS_MINOR.get(mode, True))
+    return 0 < BUMP_ORDER.get(bump, -1) <= MODE_CEILING.get(mode, 3)
 
 
 @dataclass
