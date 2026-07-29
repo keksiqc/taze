@@ -3,6 +3,8 @@ from __future__ import annotations
 import textwrap
 from typing import TYPE_CHECKING
 
+import pytest
+
 from taze.parsers import (
     build_name_filter,
     parse_dep_string,
@@ -15,60 +17,28 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-class TestParseDepString:
-    def test_eq_pin(self) -> None:
-        d = parse_dep_string("requests==2.28.0")
-        assert d is not None
-        assert d.name == "requests"
-        assert d.current == "2.28.0"
-        assert d.operator == "=="
+@pytest.mark.parametrize(
+    ("raw", "name", "current", "operator"),
+    [
+        ("requests==2.28.0", "requests", "2.28.0", "=="),
+        ("requests===2.28.0", "requests", "2.28.0", "==="),
+        ("httpx>=0.24.0", "httpx", "0.24.0", ">="),
+        ("rich~=13.0", "rich", "13.0", "~="),
+        ("requests", "requests", None, None),
+        ("My_Package==1.0", "my-package", "1.0", "=="),
+        ("requests==2.28.0  # pinned for compat", "requests", "2.28.0", "=="),
+        ("uvicorn[standard]>=0.20.0", "uvicorn", "0.20.0", ">="),
+    ],
+)
+def test_parse_dep_string(raw, name, current, operator) -> None:
+    dep = parse_dep_string(raw)
+    assert dep is not None
+    assert (dep.name, dep.current, dep.operator) == (name, current, operator)
 
-    def test_arbitrary_exact_pin(self) -> None:
-        d = parse_dep_string("requests===2.28.0")
-        assert d is not None
-        assert d.operator == "==="
 
-    def test_gte_pin(self) -> None:
-        d = parse_dep_string("httpx>=0.24.0")
-        assert d is not None
-        assert d.current == "0.24.0"
-        assert d.operator == ">="
-
-    def test_compat_pin(self) -> None:
-        d = parse_dep_string("rich~=13.0")
-        assert d is not None
-        assert d.operator == "~="
-
-    def test_no_version(self) -> None:
-        d = parse_dep_string("requests")
-        assert d is not None
-        assert d.current is None
-        assert d.operator is None
-
-    def test_normalises_name(self) -> None:
-        d = parse_dep_string("My_Package==1.0")
-        assert d is not None
-        assert d.name == "my-package"
-
-    def test_strips_inline_comment(self) -> None:
-        d = parse_dep_string("requests==2.28.0  # pinned for compat")
-        assert d is not None
-        assert d.current == "2.28.0"
-
-    def test_skips_comment_lines(self) -> None:
-        assert parse_dep_string("# this is a comment") is None
-
-    def test_skips_empty(self) -> None:
-        assert parse_dep_string("   ") is None
-
-    def test_skips_dash_flags(self) -> None:
-        assert parse_dep_string("-r base.txt") is None
-
-    def test_extras(self) -> None:
-        d = parse_dep_string("uvicorn[standard]>=0.20.0")
-        assert d is not None
-        assert d.name == "uvicorn"
-        assert d.current == "0.20.0"
+@pytest.mark.parametrize("raw", ["# this is a comment", "   ", "-r base.txt"])
+def test_parse_dep_string_skips_non_dependencies(raw) -> None:
+    assert parse_dep_string(raw) is None
 
 
 class TestParsePyproject:
