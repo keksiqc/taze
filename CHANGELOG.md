@@ -1,3 +1,13 @@
+## 0.2.5 (2026-07-29)
+
+### Refactor
+
+- calculate release age once
+- simplify interactive selection
+- simplify dependency sorting
+- parse requirements once
+- simplify bump policy lookup
+
 ## 0.2.4 (2026-07-27)
 
 ### Refactor
