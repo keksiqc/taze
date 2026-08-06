@@ -677,14 +677,18 @@ def main(
     selected_for_update: set[int] | None = None  # None = all
 
     if interactive and not silent:
-        all_outdated = [
-            i
-            for groups in resolved.values()
-            for infos in groups.values()
-            for i in infos
-            if i.is_shown(mode) and not i.fetch_error
-        ]
-        chosen = interactive_select(all_outdated)
+        interactive_categories: list[tuple[str, list[DepInfo]]] = []
+        all_outdated: list[DepInfo] = []
+        for file_path, groups in resolved.items():
+            category_groups = (
+                groups.items() if group else [("dependencies", [i for infos in groups.values() for i in infos])]
+            )
+            for label, infos in category_groups:
+                candidates = [i for i in infos if i.is_shown(mode) and not i.fetch_error]
+                if candidates:
+                    interactive_categories.append((f"📦 {file_path.name}  ·  {label}", candidates))
+                    all_outdated.extend(candidates)
+        chosen = interactive_select(all_outdated, interactive_categories)
         selected_for_update = {id(info) for info in chosen}
         total_outdated = len(chosen)
         console.print()

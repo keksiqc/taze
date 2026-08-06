@@ -161,14 +161,17 @@ def render_json(
     console.print_json(data=output)
 
 
-def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
-    """Run a checkbox menu in a TTY, with numeric input as the CI fallback."""
+def interactive_select(
+    outdated: list[DepInfo],
+    categories: list[tuple[str, list[DepInfo]]] | None = None,
+) -> list[DepInfo]:
+    """Run a grouped checkbox menu in a TTY, with numeric input as the CI fallback."""
     if not outdated:
         return []
     if not _interactive_tty():
         return _interactive_numbers(outdated)
     try:
-        return _interactive_menu(outdated)
+        return _interactive_menu(outdated, categories)
     except ImportError, OSError, ValueError:
         return _interactive_numbers(outdated)
 
@@ -216,7 +219,10 @@ def _interactive_numbers(outdated: list[DepInfo]) -> list[DepInfo]:
     return selected
 
 
-def _interactive_menu(outdated: list[DepInfo]) -> list[DepInfo]:
+def _interactive_menu(
+    outdated: list[DepInfo],
+    categories: list[tuple[str, list[DepInfo]]] | None = None,
+) -> list[DepInfo]:
     import termios
     import tty
 
@@ -229,7 +235,7 @@ def _interactive_menu(outdated: list[DepInfo]) -> list[DepInfo]:
 
     def draw() -> None:
         nonlocal rendered
-        lines = _menu_lines(outdated, cursor, selected)
+        lines = _menu_lines(outdated, cursor, selected, categories)
         if rendered:
             stream.write(f"\x1b[{rendered}A")
         for line in lines:
@@ -352,22 +358,38 @@ def _read_key(fd: int) -> str | None:
     return {b"A": "up", b"B": "down", b"C": "right", b"D": "left"}.get(code)
 
 
-def _menu_lines(outdated: list[DepInfo], cursor: int, selected: set[int]) -> list[Text | str]:
+def _menu_lines(
+    outdated: list[DepInfo],
+    cursor: int,
+    selected: set[int],
+    categories: list[tuple[str, list[DepInfo]]] | None = None,
+) -> list[Text | str]:
     lines: list[Text | str] = [
         Text("  ┃ ↑↓ to select, space to toggle, → to change version", style="dim"),
         Text("  ┃ enter to confirm, esc to cancel, a to select/unselect all", style="dim"),
     ]
-    for index, info in enumerate(outdated):
-        color = BUMP_COLOR.get(info.bump, "dim")
-        badge = {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?")
-        line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
-        line.append("◉ " if index in selected else "◌ ", style="bold green" if index in selected else "dim")
-        line.append(info.name, style="bold" if index == cursor else None)
-        line.append(f"  {info.current_spec} → ", style="dim")
-        line.append(info.latest_spec, style=f"bold {color}")
-        line.append(f"  {badge}", style=f"bold {color}")
-        lines.append(line)
+    if categories:
+        index = 0
+        for label, infos in categories:
+            lines.append(Text(f"  {label}", style="bold blue"))
+            for info in infos:
+                lines.append(_menu_dependency_line(info, index, cursor, selected))
+                index += 1
+    else:
+        lines.extend(_menu_dependency_line(info, index, cursor, selected) for index, info in enumerate(outdated))
     return lines
+
+
+def _menu_dependency_line(info: DepInfo, index: int, cursor: int, selected: set[int]) -> Text:
+    color = BUMP_COLOR.get(info.bump, "dim")
+    badge = {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?")
+    line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
+    line.append("◉ " if index in selected else "◌ ", style="bold green" if index in selected else "dim")
+    line.append(info.name, style="bold" if index == cursor else None)
+    line.append(f"  {info.current_spec} → ", style="dim")
+    line.append(info.latest_spec, style=f"bold {color}")
+    line.append(f"  {badge}", style=f"bold {color}")
+    return line
 
 
 def _version_menu_lines(info: DepInfo, versions: list[str], cursor: int) -> list[Text]:
