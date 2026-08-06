@@ -64,6 +64,7 @@ def test_version_menu_lists_alternatives() -> None:
 
 def test_interactive_menu_renders_categories() -> None:
     info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
-    lines = display._menu_lines([info], 0, {0}, [("pyproject.toml · dependencies", [info])])
+    lines = display._menu_lines([info], 0, {0}, [("pyproject.toml", [("dependencies", [info])])])
     plain = "\n".join(line.plain for line in lines if isinstance(line, Text))
-    assert "pyproject.toml · dependencies" in plain
+    assert "pyproject.toml" in plain
+    assert "dependencies" in plain

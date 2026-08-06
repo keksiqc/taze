@@ -11,14 +11,14 @@ BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?"
 
 BUMP_COLOR: dict[str, str] = {
     "major": "red",
-    "minor": "yellow",
+    "minor": "cyan",
     "patch": "green",
     "same": "dim",
     "?": "dim",
 }
 BUMP_BADGE: dict[str, str] = {
     "major": "[bold red]MAJOR[/]",
-    "minor": "[yellow]minor[/]",
+    "minor": "[cyan]minor[/]",
     "patch": "[green]patch[/]",
     "same": "[dim]up to date[/]",
     "?": "[dim]?[/]",

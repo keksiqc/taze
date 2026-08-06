@@ -10,13 +10,14 @@ import typer
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.prompt import Confirm
 
 from taze import __version__
 from taze.actions import fetch_github_action_info, is_action_file, parse_actions, write_action_updates
 from taze.cache import load_cache, save_cache
 from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
-from taze.display import console, interactive_select, render_group, render_json
+from taze.display import console, interactive_select, render_file_header, render_group, render_json
 from taze.installers import install_command
 from taze.models import MODES, PRE_RELEASE_MODES, DepInfo, calc_bump
 from taze.parsers import (
@@ -457,8 +458,6 @@ def main(
 
     if install or update:
         write = True
-    if interactive and not output_json:
-        write = True
 
     pre = mode in PRE_RELEASE_MODES
 
@@ -515,7 +514,7 @@ def main(
         if github_actions_style == "auto" and isinstance(configured_style, str):
             github_actions_style = configured_style
         github_actions = True
-    if install or update or (interactive and not output_json):
+    if install or update:
         write = True
 
     if sort and sort not in SORT_CHOICES:
@@ -676,24 +675,47 @@ def main(
     total_outdated = _count_outdated(resolved, mode)
     selected_for_update: set[int] | None = None  # None = all
 
+    # File labels double as headers, so disambiguate same-named files (e.g. a
+    # recursive scan with several pyproject.toml) with their relative path.
+    name_counts: dict[str, int] = {}
+    for file_path in resolved:
+        name_counts[file_path.name] = name_counts.get(file_path.name, 0) + 1
+    file_labels: dict[Path, str] = {}
+    for file_path in resolved:
+        if name_counts[file_path.name] == 1:
+            file_labels[file_path] = file_path.name
+        else:
+            try:
+                file_labels[file_path] = str(file_path.relative_to(root))
+            except ValueError:
+                file_labels[file_path] = str(file_path)
+
     if interactive and not silent:
-        interactive_categories: list[tuple[str, list[DepInfo]]] = []
+        interactive_categories: list[tuple[str, list[tuple[str, list[DepInfo]]]]] = []
         all_outdated: list[DepInfo] = []
         for file_path, groups in resolved.items():
             category_groups = (
                 groups.items() if group else [("dependencies", [i for infos in groups.values() for i in infos])]
             )
+            file_groups: list[tuple[str, list[DepInfo]]] = []
             for label, infos in category_groups:
                 candidates = [i for i in infos if i.is_shown(mode) and not i.fetch_error]
                 if candidates:
-                    interactive_categories.append((f"📦 {file_path.name}  ·  {label}", candidates))
+                    file_groups.append((label, candidates))
                     all_outdated.extend(candidates)
+            if file_groups:
+                interactive_categories.append((file_labels[file_path], file_groups))
         chosen = interactive_select(all_outdated, interactive_categories)
         selected_for_update = {id(info) for info in chosen}
         total_outdated = len(chosen)
         console.print()
+        if total_outdated == 0:
+            # A cancelled or fully-deselected picker isn't "up to date" — stay quiet.
+            raise typer.Exit(0)
 
     if total_outdated == 0:
+        if not silent:
+            console.print("[green]dependencies are already up-to-date[/]")
         raise typer.Exit(0)
 
     # ── Rich display ──────────────────────────────────────────────────────────
@@ -706,12 +728,14 @@ def main(
             if selected_for_update is None
             else {label: [i for i in infos if id(i) in selected_for_update] for label, infos in groups.items()}
         )
-        file_outdated = _count_outdated({file_path: display_groups}, mode)
 
         if not silent:
+            all_infos = [i for infos in display_groups.values() for i in infos]
+            if not all_deps and not any(i.is_shown(mode) or i.fetch_error for i in all_infos):
+                continue
+
             # Compute column widths across all groups in this file so every
             # group aligns to the same grid.
-            all_infos = [i for infos in display_groups.values() for i in infos]
             from taze.display import _age
 
             col_widths = (
@@ -722,7 +746,7 @@ def main(
                 max((len(i.latest_spec) for i in all_infos), default=0),
             )
 
-            console.print(f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]")
+            console.print(render_file_header(file_labels[file_path], all_infos, mode))
             console.print()
 
             display_groups = (
@@ -739,9 +763,9 @@ def main(
                 ):
                     console.print()
 
-            if file_outdated == 0:
-                console.print("  [green]✓  All dependencies are up to date![/]")
-                console.print()
+    if interactive and not silent and not write:
+        write = Confirm.ask("  [green]Write updates?[/]", default=True, console=console)
+        console.print()
 
     # ── Write ─────────────────────────────────────────────────────────────────
     if write:
@@ -770,11 +794,14 @@ def main(
 
         if total_written and not silent:
             console.print()
-            if not install and not update:
+            if not install and not update and not interactive:
                 command_text = " ".join(
                     install_command(next((fp.parent for fp in resolved if fp.name == "pyproject.toml"), root))
                 )
                 console.print(f"  [dim]Run [cyan]{command_text}[/] to install the updates.[/]")
+        if total_written and interactive and not silent and not install and not update:
+            install = Confirm.ask("  [green]Install now?[/]", default=True, console=console)
+            console.print()
     elif not silent:
         console.print(f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]")
         console.print()
