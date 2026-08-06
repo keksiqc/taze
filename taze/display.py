@@ -10,7 +10,7 @@ from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
-from taze.models import BUMP_BADGE, BUMP_COLOR, BUMP_ORDER, DepInfo
+from taze.models import BUMP_BADGE, BUMP_COLOR, BUMP_ORDER, DepInfo, calc_bump
 
 
 console = Console()
@@ -257,6 +257,8 @@ def _interactive_menu(outdated: list[DepInfo]) -> list[DepInfo]:
                     selected.add(cursor)
             elif key == "all":
                 selected = set() if len(selected) == len(outdated) else set(range(len(outdated)))
+            elif key in ("right", "l"):
+                _interactive_version_select(outdated[cursor])
             elif key == "enter":
                 return [info for index, info in enumerate(outdated) if index in selected]
             elif key in ("escape", "q", "ctrl-c"):
@@ -266,8 +268,52 @@ def _interactive_menu(outdated: list[DepInfo]) -> list[DepInfo]:
             draw()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, original)
-        stream.write("\x1b[?25h\n")
+        console.clear()
+        stream.write("\x1b[?25h")
         stream.flush()
+
+
+def _interactive_version_select(info: DepInfo) -> bool:
+    versions = list(dict.fromkeys(v for v in info.available_versions if v and v != info.current))
+    if not versions:
+        return False
+
+    cursor = max(0, versions.index(info.latest)) if info.latest in versions else 0
+    rendered = 0
+    stream = console.file
+
+    def draw() -> None:
+        nonlocal rendered
+        lines = _version_menu_lines(info, versions, cursor)
+        if rendered:
+            stream.write(f"\x1b[{rendered}A")
+        for line in lines:
+            stream.write("\x1b[2K\r")
+            console.print(line, end="\n", no_wrap=True)
+        stream.flush()
+        rendered = len(lines)
+
+    console.clear()
+    draw()
+    try:
+        while True:
+            key = _read_key(sys.stdin.fileno())
+            if key in ("up", "k"):
+                cursor = (cursor - 1) % len(versions)
+                draw()
+            elif key in ("down", "j"):
+                cursor = (cursor + 1) % len(versions)
+                draw()
+            elif key in ("enter", "left", "right"):
+                info.latest = versions[cursor]
+                info.release_date = None
+                info.bump = calc_bump(info.current, info.latest)
+                info.effective_mode = "major"
+                return True
+            elif key == "escape":
+                return False
+    finally:
+        console.clear()
 
 
 def _read_key(fd: int) -> str | None:
@@ -288,6 +334,10 @@ def _read_key(fd: int) -> str | None:
         return "k"
     if key in (b"j", b"J"):
         return "j"
+    if key in (b"h", b"H"):
+        return "left"
+    if key in (b"l", b"L"):
+        return "right"
     if key == b"\x03":
         return "ctrl-c"
     if key != b"\x1b":
@@ -299,22 +349,35 @@ def _read_key(fd: int) -> str | None:
     if bracket not in (b"[", b"O"):
         return "escape"
     code = os.read(fd, 1)
-    return {b"A": "up", b"B": "down"}.get(code)
+    return {b"A": "up", b"B": "down", b"C": "right", b"D": "left"}.get(code)
 
 
 def _menu_lines(outdated: list[DepInfo], cursor: int, selected: set[int]) -> list[Text | str]:
     lines: list[Text | str] = [
-        Text("  Select packages to update", style="bold"),
-        Text("  ↑↓ navigate   space toggle   a all/none   enter confirm   esc cancel", style="dim"),
+        Text("  ┃ ↑↓ to select, space to toggle, → to change version", style="dim"),
+        Text("  ┃ enter to confirm, esc to cancel, a to select/unselect all", style="dim"),
     ]
     for index, info in enumerate(outdated):
         color = BUMP_COLOR.get(info.bump, "dim")
         badge = {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?")
         line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
-        line.append("☑ " if index in selected else "☐ ", style="bold green" if index in selected else "dim")
+        line.append("◉ " if index in selected else "◌ ", style="bold green" if index in selected else "dim")
         line.append(info.name, style="bold" if index == cursor else None)
         line.append(f"  {info.current_spec} → ", style="dim")
         line.append(info.latest_spec, style=f"bold {color}")
         line.append(f"  {badge}", style=f"bold {color}")
+        lines.append(line)
+    return lines
+
+
+def _version_menu_lines(info: DepInfo, versions: list[str], cursor: int) -> list[Text]:
+    lines: list[Text] = [
+        Text(f"  ┃ Select a version for {info.name} (current {info.current_spec})", style="dim"),
+        Text("  ┃ ↑↓ to select, enter to confirm, esc to go back", style="dim"),
+    ]
+    for index, version in enumerate(versions):
+        line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
+        line.append(version, style="bold" if index == cursor else "dim")
+        line.append(f"  {calc_bump(info.current, version)}", style="dim")
         lines.append(line)
     return lines

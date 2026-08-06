@@ -74,6 +74,7 @@ def resolve_deps(
     force: bool = False,
     request_timeout: float = 10.0,
     retries: int = 2,
+    interactive: bool = False,
 ) -> list[DepInfo]:
     """Fetch registry metadata concurrently and return enriched dependencies."""
     include_selectors = include_selectors or []
@@ -126,14 +127,16 @@ def resolve_deps(
                 force=force,
                 request_timeout=request_timeout,
                 retries=retries,
+                interactive=interactive,
             ): i
             for i in infos
         }
         for fut in as_completed(futures):
             info = futures[fut]
             try:
-                version, latest_date, current_date, target_sha = fut.result()
+                version, latest_date, current_date, target_sha, available_versions = fut.result()
                 info.latest = version
+                info.available_versions = available_versions
                 info.release_date = latest_date
                 info.current_release_date = current_date
                 info.action_target_sha = target_sha
@@ -163,9 +166,10 @@ def _fetch_info(
     force: bool,
     request_timeout: float,
     retries: int,
-) -> tuple[str | None, str | None, str | None, str | None]:
+    interactive: bool,
+) -> tuple[str | None, str | None, str | None, str | None, tuple[str, ...]]:
     if info.source == "github-actions":
-        return fetch_github_action_info(
+        version, latest_date, current_date, target_sha = fetch_github_action_info(
             info.action_repo or info.name,
             current_version=info.current,
             mode=mode,
@@ -179,6 +183,7 @@ def _fetch_info(
             cache=action_cache,
             force=force,
         )
+        return version, latest_date, current_date, target_sha, ()
     version, latest_date, current_date = fetch_pypi_info(
         info.name,
         pre=pre,
@@ -194,7 +199,28 @@ def _fetch_info(
         cache=cache,
         force=force,
     )
-    return version, latest_date, current_date, None
+    return (
+        version,
+        latest_date,
+        current_date,
+        None,
+        _interactive_versions(
+            info,
+            mode=mode,
+            pre=pre,
+            include_locked=include_locked,
+            maturity_period=maturity_period,
+            maturity_exclude_pat=maturity_exclude_pat,
+            maturity_exclude_ranges=maturity_exclude_ranges,
+            exclude_ranges=exclude_ranges,
+            include_ranges=include_ranges,
+            cache=cache,
+            request_timeout=request_timeout,
+            retries=retries,
+        )
+        if interactive
+        else (),
+    )
 
 
 def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> SpecifierSet | None:
@@ -205,6 +231,48 @@ def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> 
         return Requirement(info.raw).specifier
     except InvalidRequirement:
         return None
+
+
+def _interactive_versions(
+    info: DepInfo,
+    *,
+    mode: str,
+    pre: bool,
+    include_locked: bool,
+    maturity_period: int,
+    maturity_exclude_pat: re.Pattern[str] | None,
+    maturity_exclude_ranges: tuple[str, ...],
+    exclude_ranges: tuple[str, ...],
+    include_ranges: tuple[str, ...],
+    cache: dict[str, dict] | None,
+    request_timeout: float,
+    retries: int,
+) -> tuple[str, ...]:
+    """Get the same patch/minor/latest choices exposed by the JS selector."""
+    if cache is None:
+        return (info.latest,) if info.latest else ()
+    specifier = _resolution_specifier(info, mode=mode, include_locked=include_locked)
+    period = 0 if maturity_exclude_pat and maturity_exclude_pat.match(info.name) else maturity_period
+    choices: list[str] = []
+    for choice_mode in ("latest", "minor", "patch"):
+        version, _, _ = fetch_pypi_info(
+            info.name,
+            pre=pre,
+            current_version=info.current,
+            specifier=specifier,
+            mode=choice_mode,
+            maturity_period=period,
+            exclude_ranges=exclude_ranges,
+            include_ranges=include_ranges,
+            maturity_exclude_ranges=maturity_exclude_ranges,
+            timeout=request_timeout,
+            retries=retries,
+            cache=cache,
+            force=False,
+        )
+        if version and version not in choices and version != info.current:
+            choices.append(version)
+    return tuple(choices)
 
 
 # ─── File discovery ───────────────────────────────────────────────────────────
@@ -572,6 +640,7 @@ def main(
                     force=force,
                     request_timeout=request_timeout,
                     retries=0 if no_retry else retries,
+                    interactive=interactive,
                 )
 
     save_cache(registry_cache)
@@ -603,20 +672,42 @@ def main(
         total_outdated = _count_outdated(resolved, mode)
         raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
 
+    # ── Interactive selection ─────────────────────────────────────────────────
+    total_outdated = _count_outdated(resolved, mode)
+    selected_for_update: set[int] | None = None  # None = all
+
+    if interactive and not silent:
+        all_outdated = [
+            i
+            for groups in resolved.values()
+            for infos in groups.values()
+            for i in infos
+            if i.is_shown(mode) and not i.fetch_error
+        ]
+        chosen = interactive_select(all_outdated)
+        selected_for_update = {id(info) for info in chosen}
+        total_outdated = len(chosen)
+        console.print()
+
+    if total_outdated == 0:
+        raise typer.Exit(0)
+
     # ── Rich display ──────────────────────────────────────────────────────────
     if not silent:
         console.print()
 
-    total_outdated = 0
-
     for file_path, groups in resolved.items():
-        file_outdated = _count_outdated({file_path: groups}, mode)
-        total_outdated += file_outdated
+        display_groups = (
+            groups
+            if selected_for_update is None
+            else {label: [i for i in infos if id(i) in selected_for_update] for label, infos in groups.items()}
+        )
+        file_outdated = _count_outdated({file_path: display_groups}, mode)
 
         if not silent:
             # Compute column widths across all groups in this file so every
             # group aligns to the same grid.
-            all_infos = [i for infos in groups.values() for i in infos]
+            all_infos = [i for infos in display_groups.values() for i in infos]
             from taze.display import _age
 
             col_widths = (
@@ -630,7 +721,9 @@ def main(
             console.print(f"  [bold]📦  {file_path.name}[/]  [dim]{file_path.resolve()}[/]")
             console.print()
 
-            display_groups = groups if group else {"dependencies": [i for infos in groups.values() for i in infos]}
+            display_groups = (
+                display_groups if group else {"dependencies": [i for infos in display_groups.values() for i in infos]}
+            )
             for label, infos in display_groups.items():
                 if render_group(
                     label,
@@ -645,24 +738,6 @@ def main(
             if file_outdated == 0:
                 console.print("  [green]✓  All dependencies are up to date![/]")
                 console.print()
-
-    if total_outdated == 0:
-        raise typer.Exit(0)
-
-    # ── Interactive selection ─────────────────────────────────────────────────
-    selected_for_update: set[int] | None = None  # None = all
-
-    if interactive and not silent:
-        all_outdated = [
-            i
-            for groups in resolved.values()
-            for infos in groups.values()
-            for i in infos
-            if i.is_shown(mode) and not i.fetch_error
-        ]
-        chosen = interactive_select(all_outdated)
-        selected_for_update = {id(info) for info in chosen}
-        console.print()
 
     # ── Write ─────────────────────────────────────────────────────────────────
     if write:

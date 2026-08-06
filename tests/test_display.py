@@ -50,5 +50,13 @@ def test_interactive_menu_renders_checked_cursor() -> None:
     info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
     lines = display._menu_lines([info], 0, {0})
     plain = "\n".join(line.plain for line in lines if isinstance(line, Text))
-    assert "☑" in plain
+    assert "◉" in plain
     assert "❯" in plain
+
+
+def test_version_menu_lists_alternatives() -> None:
+    info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
+    lines = display._version_menu_lines(info, ["3", "2.9"], 0)
+    plain = "\n".join(line.plain for line in lines)
+    assert "Select a version for requests" in plain
+    assert "2.9" in plain

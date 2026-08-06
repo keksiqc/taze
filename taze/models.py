@@ -85,6 +85,7 @@ class DepInfo:
     action_style: str | None = None
     action_sha: str | None = None
     action_target_sha: str | None = None
+    available_versions: tuple[str, ...] = ()
 
     @property
     def current_spec(self) -> str:

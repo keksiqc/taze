@@ -70,7 +70,7 @@ taze patch -w
 # Write all updates and run uv sync
 taze -w -i
 
-# Interactive checkbox menu (↑/↓, space, a, Enter, Esc)
+# Interactive checkbox menu (↑/↓, space, a, → version, Enter, Esc)
 taze -I
 
 # Include pre-releases
