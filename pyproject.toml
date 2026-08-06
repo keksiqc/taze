@@ -5,9 +5,9 @@ description = "🥬 Keep your Python deps fresh"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-  "packaging>=26.2",
+  "packaging>=26.3",
   "rich>=15.0.0",
-  "typer>=0.27.0",
+  "typer>=0.27.1",
 ]
 
 [project.scripts]
@@ -16,10 +16,10 @@ taze = "taze.main:app"
 [dependency-groups]
 dev = [
   "commitizen>=4.17.0",
-  "prek>=0.4.11",
+  "prek>=0.4.12",
   "pytest>=9.1.1",
-  "ruff>=0.16.0",
-  "ty>=0.0.64",
+  "ruff>=0.16.1",
+  "ty>=0.0.69",
 ]
 
 [build-system]
