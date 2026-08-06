@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import select
+import sys
 from datetime import UTC, date, datetime
 
 from rich import box
@@ -160,10 +162,22 @@ def render_json(
 
 
 def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
-    """Prompt the user to choose which packages to update. Returns selected subset."""
+    """Run a checkbox menu in a TTY, with numeric input as the CI fallback."""
     if not outdated:
         return []
+    if not _interactive_tty():
+        return _interactive_numbers(outdated)
+    try:
+        return _interactive_menu(outdated)
+    except ImportError, OSError, ValueError:
+        return _interactive_numbers(outdated)
 
+
+def _interactive_tty() -> bool:
+    return bool(getattr(sys.stdin, "isatty", lambda: False)() and getattr(console.file, "isatty", lambda: False)())
+
+
+def _interactive_numbers(outdated: list[DepInfo]) -> list[DepInfo]:
     console.print()
     console.print("  [bold]Select packages to update:[/]")
     for idx, info in enumerate(outdated, 1):
@@ -199,5 +213,108 @@ def interactive_select(outdated: list[DepInfo]) -> list[DepInfo]:
         except ValueError:
             continue
         selected.extend(outdated[i - 1] for i in indices if 1 <= i <= len(outdated))
-
     return selected
+
+
+def _interactive_menu(outdated: list[DepInfo]) -> list[DepInfo]:
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    original = termios.tcgetattr(fd)
+    selected = set(range(len(outdated)))
+    cursor = 0
+    rendered = 0
+    stream = console.file
+
+    def draw() -> None:
+        nonlocal rendered
+        lines = _menu_lines(outdated, cursor, selected)
+        if rendered:
+            stream.write(f"\x1b[{rendered}A")
+        for line in lines:
+            stream.write("\x1b[2K\r")
+            console.print(line, end="\n", no_wrap=True)
+        stream.flush()
+        rendered = len(lines)
+
+    try:
+        tty.setcbreak(fd)
+        stream.write("\x1b[?25l")
+        stream.flush()
+        console.print()
+        draw()
+        while True:
+            key = _read_key(fd)
+            if key in ("up", "k"):
+                cursor = (cursor - 1) % len(outdated)
+            elif key in ("down", "j"):
+                cursor = (cursor + 1) % len(outdated)
+            elif key == "space":
+                if cursor in selected:
+                    selected.remove(cursor)
+                else:
+                    selected.add(cursor)
+            elif key == "all":
+                selected = set() if len(selected) == len(outdated) else set(range(len(outdated)))
+            elif key == "enter":
+                return [info for index, info in enumerate(outdated) if index in selected]
+            elif key in ("escape", "q", "ctrl-c"):
+                return []
+            else:
+                continue
+            draw()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, original)
+        stream.write("\x1b[?25h\n")
+        stream.flush()
+
+
+def _read_key(fd: int) -> str | None:
+    import os
+
+    key = os.read(fd, 1)
+    if not key:
+        return "escape"
+    if key in (b"\r", b"\n"):
+        return "enter"
+    if key == b" ":
+        return "space"
+    if key in (b"a", b"A"):
+        return "all"
+    if key in (b"q", b"Q"):
+        return "q"
+    if key in (b"k", b"K"):
+        return "k"
+    if key in (b"j", b"J"):
+        return "j"
+    if key == b"\x03":
+        return "ctrl-c"
+    if key != b"\x1b":
+        return None
+
+    if not select.select([fd], [], [], 0.05)[0]:
+        return "escape"
+    bracket = os.read(fd, 1)
+    if bracket not in (b"[", b"O"):
+        return "escape"
+    code = os.read(fd, 1)
+    return {b"A": "up", b"B": "down"}.get(code)
+
+
+def _menu_lines(outdated: list[DepInfo], cursor: int, selected: set[int]) -> list[Text | str]:
+    lines: list[Text | str] = [
+        Text("  Select packages to update", style="bold"),
+        Text("  ↑↓ navigate   space toggle   a all/none   enter confirm   esc cancel", style="dim"),
+    ]
+    for index, info in enumerate(outdated):
+        color = BUMP_COLOR.get(info.bump, "dim")
+        badge = {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?")
+        line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
+        line.append("☑ " if index in selected else "☐ ", style="bold green" if index in selected else "dim")
+        line.append(info.name, style="bold" if index == cursor else None)
+        line.append(f"  {info.current_spec} → ", style="dim")
+        line.append(info.latest_spec, style=f"bold {color}")
+        line.append(f"  {badge}", style=f"bold {color}")
+        lines.append(line)
+    return lines

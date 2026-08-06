@@ -650,14 +650,18 @@ def main(
         raise typer.Exit(0)
 
     # ── Interactive selection ─────────────────────────────────────────────────
-    selected_for_update: set[str] | None = None  # None = all
+    selected_for_update: set[int] | None = None  # None = all
 
     if interactive and not silent:
         all_outdated = [
-            i for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode)
+            i
+            for groups in resolved.values()
+            for infos in groups.values()
+            for i in infos
+            if i.is_shown(mode) and not i.fetch_error
         ]
         chosen = interactive_select(all_outdated)
-        selected_for_update = {i.name for i in chosen}
+        selected_for_update = {id(info) for info in chosen}
         console.print()
 
     # ── Write ─────────────────────────────────────────────────────────────────
@@ -667,7 +671,7 @@ def main(
             # Filter to selected packages if in interactive mode
             if selected_for_update is not None:
                 filtered: dict[str, list[DepInfo]] = {
-                    label: [i for i in infos if i.name in selected_for_update] for label, infos in groups.items()
+                    label: [i for i in infos if id(i) in selected_for_update] for label, infos in groups.items()
                 }
             else:
                 filtered = groups
