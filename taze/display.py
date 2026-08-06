@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import select
+import shutil
 import sys
 from datetime import UTC, date, datetime
 
@@ -165,7 +166,7 @@ def interactive_select(
     outdated: list[DepInfo],
     categories: list[tuple[str, list[DepInfo]]] | None = None,
 ) -> list[DepInfo]:
-    """Run a grouped checkbox menu in a TTY, with numeric input as the CI fallback."""
+    """Run the full-screen selector in a TTY, with numeric input as CI fallback."""
     if not outdated:
         return []
     if not _interactive_tty():
@@ -235,20 +236,13 @@ def _interactive_menu(
 
     def draw() -> None:
         nonlocal rendered
-        lines = _menu_lines(outdated, cursor, selected, categories)
-        if rendered:
-            stream.write(f"\x1b[{rendered}A")
-        for line in lines:
-            stream.write("\x1b[2K\r")
-            console.print(line, end="\n", no_wrap=True)
-        stream.flush()
-        rendered = len(lines)
+        rendered = _draw_lines(_menu_lines(outdated, cursor, selected, categories), rendered)
 
     try:
         tty.setcbreak(fd)
+        console.clear()
         stream.write("\x1b[?25l")
         stream.flush()
-        console.print()
         draw()
         while True:
             key = _read_key(fd)
@@ -264,7 +258,8 @@ def _interactive_menu(
             elif key == "all":
                 selected = set() if len(selected) == len(outdated) else set(range(len(outdated)))
             elif key in ("right", "l"):
-                _interactive_version_select(outdated[cursor])
+                if _interactive_version_select(outdated[cursor]):
+                    rendered = 0
             elif key == "enter":
                 return [info for index, info in enumerate(outdated) if index in selected]
             elif key in ("escape", "q", "ctrl-c"):
@@ -286,40 +281,37 @@ def _interactive_version_select(info: DepInfo) -> bool:
 
     cursor = max(0, versions.index(info.latest)) if info.latest in versions else 0
     rendered = 0
-    stream = console.file
-
-    def draw() -> None:
-        nonlocal rendered
-        lines = _version_menu_lines(info, versions, cursor)
-        if rendered:
-            stream.write(f"\x1b[{rendered}A")
-        for line in lines:
-            stream.write("\x1b[2K\r")
-            console.print(line, end="\n", no_wrap=True)
-        stream.flush()
-        rendered = len(lines)
 
     console.clear()
-    draw()
     try:
         while True:
+            rendered = _draw_lines(_version_menu_lines(info, versions, cursor), rendered)
             key = _read_key(sys.stdin.fileno())
             if key in ("up", "k"):
                 cursor = (cursor - 1) % len(versions)
-                draw()
             elif key in ("down", "j"):
                 cursor = (cursor + 1) % len(versions)
-                draw()
             elif key in ("enter", "left", "right"):
                 info.latest = versions[cursor]
                 info.release_date = None
                 info.bump = calc_bump(info.current, info.latest)
                 info.effective_mode = "major"
                 return True
-            elif key == "escape":
-                return False
+            elif key in ("escape", "q", "ctrl-c"):
+                return True
     finally:
         console.clear()
+
+
+def _draw_lines(lines: list[Text], previous: int) -> int:
+    stream = console.file
+    if previous:
+        stream.write(f"\x1b[{previous}A")
+    for line in lines:
+        stream.write("\x1b[2K\r")
+        console.print(line, end="\n", no_wrap=True, overflow="crop")
+    stream.flush()
+    return len(lines)
 
 
 def _read_key(fd: int) -> str | None:
@@ -363,43 +355,104 @@ def _menu_lines(
     cursor: int,
     selected: set[int],
     categories: list[tuple[str, list[DepInfo]]] | None = None,
-) -> list[Text | str]:
-    lines: list[Text | str] = [
+) -> list[Text]:
+    fixed = [
         Text("  ┃ ↑↓ to select, space to toggle, → to change version", style="dim"),
         Text("  ┃ enter to confirm, esc to cancel, a to select/unselect all", style="dim"),
+        Text(),
     ]
-    if categories:
-        index = 0
-        for label, infos in categories:
-            lines.append(Text(f"  {label}", style="bold blue"))
-            for info in infos:
-                lines.append(_menu_dependency_line(info, index, cursor, selected))
-                index += 1
+    body = _menu_body(outdated, cursor, selected, categories)
+    height = shutil.get_terminal_size((120, 24)).lines
+    limit = max(1, height - len(fixed) - 1)
+    if len(body) > limit:
+        focused = next((position for position, (_, index) in enumerate(body) if index == cursor), 0)
+        start = max(0, min(focused - limit // 2, len(body) - limit))
+        visible = body[start : start + limit]
+        visible.append((Text("  -- END --", style="yellow"), None))
     else:
-        lines.extend(_menu_dependency_line(info, index, cursor, selected) for index, info in enumerate(outdated))
-    return lines
+        visible = body
+    return fixed + [line for line, _ in visible]
 
 
-def _menu_dependency_line(info: DepInfo, index: int, cursor: int, selected: set[int]) -> Text:
+def _menu_body(
+    outdated: list[DepInfo],
+    cursor: int,
+    selected: set[int],
+    categories: list[tuple[str, list[DepInfo]]] | None,
+) -> list[tuple[Text, int | None]]:
+    widths = _menu_widths(outdated)
+    body: list[tuple[Text, int | None]] = []
+    index = 0
+    groups = categories or [("", outdated)]
+    for label, infos in groups:
+        if label:
+            body.append((Text(f"  {label}", style="bold blue"), None))
+        for info in infos:
+            body.append((_menu_dependency_line(info, index, cursor, selected, widths), index))
+            index += 1
+    return body
+
+
+def _menu_widths(infos: list[DepInfo]) -> tuple[int, int, int, int, int]:
+    return (
+        max((len(info.name) for info in infos), default=0),
+        max((len(_age(info.current_release_date)[0]) for info in infos), default=0),
+        max((len(info.current_spec) for info in infos), default=0),
+        max((len(info.latest_spec) for info in infos), default=0),
+        max((len(_age(info.release_date)[0]) for info in infos), default=0),
+    )
+
+
+def _append_cell(line: Text, value: str, width: int, style: str | None = None) -> None:
+    line.append(value.ljust(width), style=style)
+
+
+def _menu_dependency_line(
+    info: DepInfo,
+    index: int,
+    cursor: int,
+    selected: set[int],
+    widths: tuple[int, int, int, int, int],
+) -> Text:
+    name_width, current_age_width, current_width, latest_width, latest_age_width = widths
+    checked = index in selected
     color = BUMP_COLOR.get(info.bump, "dim")
-    badge = {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?")
+    current_age, current_age_color = _age(info.current_release_date)
+    latest_age, latest_age_color = _age(info.release_date)
+    row_style = None if checked else "dim"
     line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
-    line.append("◉ " if index in selected else "◌ ", style="bold green" if index in selected else "dim")
-    line.append(info.name, style="bold" if index == cursor else None)
-    line.append(f"  {info.current_spec} → ", style="dim")
-    line.append(info.latest_spec, style=f"bold {color}")
-    line.append(f"  {badge}", style=f"bold {color}")
+    line.append("◉ " if checked else "◌ ", style="bold green" if checked else "dim")
+    _append_cell(line, info.name, name_width, "bold" if index == cursor and checked else row_style)
+    line.append("  ")
+    _append_cell(line, current_age, current_age_width, current_age_color if checked else "dim")
+    line.append("  ")
+    _append_cell(line, info.current_spec, current_width, "dim")
+    line.append("  ")
+    line.append("→" if checked else "·", style=color if checked else "dim")
+    line.append("  ")
+    _append_cell(line, info.latest_spec, latest_width, f"bold {color}" if checked else "dim strike")
+    line.append("  ")
+    _append_cell(line, latest_age, latest_age_width, latest_age_color if checked else "dim")
+    line.append("  ")
+    line.append(
+        {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?"),
+        style=f"bold {color}" if checked else "dim",
+    )
     return line
 
 
 def _version_menu_lines(info: DepInfo, versions: list[str], cursor: int) -> list[Text]:
-    lines: list[Text] = [
+    fixed = [
         Text(f"  ┃ Select a version for {info.name} (current {info.current_spec})", style="dim"),
         Text("  ┃ ↑↓ to select, enter to confirm, esc to go back", style="dim"),
+        Text(),
     ]
+    width = max((len(version) for version in versions), default=0)
+    lines = fixed[:]
     for index, version in enumerate(versions):
+        bump = calc_bump(info.current, version)
         line = Text("❯ " if index == cursor else "  ", style="bold cyan" if index == cursor else "")
-        line.append(version, style="bold" if index == cursor else "dim")
-        line.append(f"  {calc_bump(info.current, version)}", style="dim")
+        _append_cell(line, version, width, "bold" if index == cursor else "dim")
+        line.append(f"  {info.current_spec}  →  {version}  {bump}", style="dim" if index != cursor else None)
         lines.append(line)
     return lines
