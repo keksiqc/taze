@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
+import sys
 import time
+import urllib.parse
 import urllib.request
+from collections.abc import MutableMapping
 from datetime import UTC, date, datetime
 from urllib.error import URLError
 
-from packaging.specifiers import SpecifierSet
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from taze import __version__
@@ -24,87 +28,239 @@ def fetch_pypi_info(
     specifier: SpecifierSet | None = None,
     mode: str = "major",
     maturity_period: int = 0,
+    exclude_ranges: tuple[str, ...] = (),
+    include_ranges: tuple[str, ...] = (),
+    maturity_exclude_ranges: tuple[str, ...] = (),
+    timeout: float = 10.0,
+    retries: int = 2,
+    cache: MutableMapping[str, dict] | None = None,
+    force: bool = False,
 ) -> tuple[str | None, str | None, str | None]:
     """
-    Return (latest_version, latest_release_date, current_release_date).
+    Return ``(latest_version, latest_release_date, current_release_date)``.
 
-    Dates are YYYY-MM-DD strings. All three are None on failure.
+    ``cache`` is deliberately an optional raw-response mapping: callers that
+    need a persistent cache can load/save it around a scan, while direct use
+    remains deterministic and easy to test.
     """
-    url = f"https://pypi.org/pypi/{package}/json"
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    data: dict | None = None
-    for _attempt, delay in enumerate((*_RETRY_DELAYS, None)):
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read())
-            break
-        except URLError, OSError, ValueError:
-            if delay is None:
-                return None, None, None
-            time.sleep(delay)
+    data = None if force else _cached(cache, package)
     if data is None:
+        data = _request(package, timeout=timeout, retries=max(0, retries))
+        if data is None:
+            return None, None, None
+        if cache is not None:
+            cache[package] = data
+
+    if not isinstance(data, dict):
         return None, None, None
 
-    info_version: str = data.get("info", {}).get("version", "")
-    releases: dict = data.get("releases", {})
+    info = data.get("info", {})
+    releases = data.get("releases", {})
+    if not isinstance(info, dict) or not isinstance(releases, dict):
+        return None, None, None
 
+    info_version = info.get("version", "") if isinstance(info.get("version", ""), str) else ""
     current_date = _upload_date(releases, current_version) if current_version else None
+    excluded = normalise_version_ranges(exclude_ranges)
+    included = normalise_version_ranges(include_ranges)
+    maturity_excluded = normalise_version_ranges(maturity_exclude_ranges)
+    current = _as_version(current_version)
 
     # The registry's ``info.version`` is sufficient only when no policy needs
-    # to inspect the release history. Range- and mode-aware resolution must
-    # consider every non-yanked release.
-    if not specifier and not maturity_period and mode in ("major", "latest", "stable") and not pre and info_version:
+    # to inspect release history. Range- and mode-aware resolution scans all
+    # non-yanked releases instead.
+    if (
+        not specifier
+        and not maturity_period
+        and not excluded
+        and not included
+        and mode in ("major", "latest")
+        and not pre
+        and info_version
+        and _python_compatible(releases.get(info_version, []), info.get("requires_python"))
+    ):
         try:
-            v = Version(info_version)
-            if not v.is_prerelease and not v.is_devrelease:
-                return str(v), _upload_date(releases, info_version), current_date
+            version = Version(info_version)
+            if (
+                not version.is_prerelease
+                and not version.is_devrelease
+                and (not current_version or _within_mode(version, _as_version(current_version), mode))
+                and (current is None or version > current)
+            ):
+                return str(version), _upload_date(releases, info_version), current_date
         except InvalidVersion:
             pass
 
-    current = _as_version(current_version)
     best: Version | None = None
-    for v_str, files in releases.items():
-        if not files:
+    for version_string, files in releases.items():
+        if not isinstance(version_string, str) or not isinstance(files, list) or not files:
             continue
-        if all(f.get("yanked") for f in files):
+        if all(isinstance(file, dict) and file.get("yanked") for file in files):
             continue
         try:
-            v = Version(v_str)
+            version = Version(version_string)
         except InvalidVersion:
             continue
-        if not pre and (v.is_prerelease or v.is_devrelease):
+        if not pre and (version.is_prerelease or version.is_devrelease):
             continue
-        if maturity_period and not _is_mature(files, maturity_period):
+        if not _python_compatible(files, info.get("requires_python") if version_string == info_version else None):
             continue
-        if specifier and not specifier.contains(v, prereleases=pre):
+        if included and not _version_in_ranges(version, included):
             continue
-        if current and not _within_mode(v, current, mode):
+        if excluded and _version_in_ranges(version, excluded):
             continue
-        if best is None or v > best:
-            best = v
+        if (
+            maturity_period
+            and not _version_in_ranges(version, maturity_excluded)
+            and not _is_mature(files, maturity_period)
+        ):
+            continue
+        if specifier and not specifier.contains(version, prereleases=pre):
+            continue
+        if current and (version <= current or not _within_mode(version, current, mode)):
+            continue
+        if best is None or version > best:
+            best = version
 
     if best is None:
-        return None, None, current_date
-    return str(best), _upload_date(releases, str(best)), current_date
+        return current_version, current_date, current_date if current_version else None
+    best_string = str(best)
+    return best_string, _upload_date(releases, best_string), current_date
+
+
+def _cached(cache: MutableMapping[str, dict] | None, package: str) -> dict | None:
+    if cache is None:
+        return None
+    data = cache.get(package)
+    if isinstance(data, dict) and "data" in data and isinstance(data["data"], dict):
+        return data["data"]
+    return data if isinstance(data, dict) else None
+
+
+def _request(package: str, *, timeout: float, retries: int) -> dict | None:
+    encoded = urllib.parse.quote(package, safe="")
+    url = f"https://pypi.org/pypi/{encoded}/json"
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read())
+            return data if isinstance(data, dict) else None
+        except URLError, OSError, ValueError:
+            if attempt >= retries:
+                return None
+            delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1] * 2 ** (attempt - 1)
+            time.sleep(delay)
+    return None
+
+
+def normalise_version_ranges(ranges: tuple[str, ...] | list[str]) -> tuple[SpecifierSet, ...]:
+    """Convert upstream-style selectors such as ``7`` and ``^2`` to PEP 440."""
+    result: list[SpecifierSet] = []
+    for raw in ranges:
+        for value in raw.split("||"):
+            value = value.strip()
+            if not value:
+                continue
+            converted = _normalise_range(value)
+            if converted is None:
+                continue
+            try:
+                result.append(SpecifierSet(converted))
+            except InvalidSpecifier:
+                continue
+    return tuple(result)
+
+
+def _normalise_range(value: str) -> str | None:
+    value = value.strip()
+    if value.startswith("^"):
+        return _caret_range(value[1:])
+    if value.startswith("~") and not value.startswith("~="):
+        return _tilde_range(value[1:])
+    if re.fullmatch(r"v?\d+(?:\.\d+){0,2}", value):
+        parts = value.lstrip("v").split(".")
+        if len(parts) == 1:
+            return f">={value.lstrip('v')},<{int(parts[0]) + 1}"
+        if len(parts) == 2:
+            return f">={value.lstrip('v')},<{parts[0]}.{int(parts[1]) + 1}"
+        return f"=={value.lstrip('v')}"
+    return value
+
+
+def _caret_range(value: str) -> str | None:
+    try:
+        base = Version(value)
+    except InvalidVersion:
+        return None
+    if base.major:
+        upper = f"{base.major + 1}.0"
+    elif base.minor:
+        upper = f"0.{base.minor + 1}"
+    else:
+        upper = f"0.0.{base.micro + 1}"
+    return f">={base},<{upper}"
+
+
+def _tilde_range(value: str) -> str | None:
+    try:
+        base = Version(value)
+    except InvalidVersion:
+        return None
+    return f">={base},<{base.major}.{base.minor + 1}"
+
+
+def _version_in_ranges(version: Version, ranges: tuple[SpecifierSet, ...]) -> bool:
+    return any(specifier.contains(version, prereleases=True) for specifier in ranges)
+
+
+def _python_compatible(files: object, fallback: object = None) -> bool:
+    """Reject releases that cannot run on the interpreter doing the check."""
+    if not isinstance(files, list):
+        return _python_requirement_compatible(fallback)
+    current = Version(".".join(str(part) for part in sys.version_info[:3]))
+    requirements: list[str] = []
+    unconstrained = False
+    for file in files:
+        if not isinstance(file, dict):
+            continue
+        requirement = file.get("requires_python")
+        if not requirement:
+            unconstrained = True
+        elif isinstance(requirement, str):
+            requirements.append(requirement)
+    if not requirements:
+        return _python_requirement_compatible(fallback) if fallback else True
+    return unconstrained or any(_python_requirement_compatible(requirement, current) for requirement in requirements)
+
+
+def _python_requirement_compatible(requirement: object, current: Version | None = None) -> bool:
+    if not isinstance(requirement, str) or not requirement:
+        return True
+    try:
+        version = current or Version(".".join(str(part) for part in sys.version_info[:3]))
+        return SpecifierSet(requirement).contains(version, prereleases=True)
+    except InvalidSpecifier:
+        return True
 
 
 def _as_version(value: str | None) -> Version | None:
     if not value:
         return None
     try:
-        return Version(value)
+        return Version(value.lstrip("vV"))
     except InvalidVersion:
         return None
 
 
-def _within_mode(candidate: Version, current: Version, mode: str) -> bool:
+def _within_mode(candidate: Version, current: Version | None, mode: str) -> bool:
     """Return whether a candidate stays within the requested update ceiling."""
-    if candidate <= current:
+    if current is None or candidate <= current:
         return True
     if mode == "patch":
         return candidate.major == current.major and candidate.minor == current.minor
-    if mode == "minor":
-        return candidate.major == current.major
+    if mode in ("minor", "default", "stable"):
+        return candidate.major == current.major if mode == "minor" else True
     return True
 
 
@@ -126,8 +282,10 @@ def _upload_date(releases: dict, version: str | None) -> str | None:
     if not version:
         return None
     files = releases.get(version) or releases.get(version.replace("-", "_")) or []
-    for f in files:
-        ts: str = f.get("upload_time", "")
-        if ts:
-            return ts[:10]  # YYYY-MM-DD
+    for file in files:
+        if not isinstance(file, dict):
+            continue
+        timestamp = file.get("upload_time") or file.get("upload_time_iso_8601") or ""
+        if timestamp:
+            return str(timestamp)[:10]
     return None

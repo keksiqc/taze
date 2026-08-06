@@ -5,8 +5,8 @@ from taze.config import load_config, package_mode_for
 
 class TestLoadConfig:
     def test_loads_taze_toml(self, tmp_path) -> None:
-        (tmp_path / "taze.toml").write_text('include = "httpx"\nconcurrency = 4\nunknown = true\n')
-        assert load_config(tmp_path) == {"include": "httpx", "concurrency": 4}
+        (tmp_path / "taze.toml").write_text('include = "httpx"\nconcurrency = 4\njson = true\nunknown = true\n')
+        assert load_config(tmp_path) == {"include": "httpx", "concurrency": 4, "output_json": True}
 
     def test_loads_tool_table_from_pyproject(self, tmp_path) -> None:
         (tmp_path / "pyproject.toml").write_text(

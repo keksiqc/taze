@@ -128,8 +128,13 @@ def _sort_infos(infos: list[DepInfo], sort: str) -> None:
     infos.sort(key=key, reverse=sort.endswith("desc"))
 
 
-def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
-    """Print resolved dependency info as JSON to stdout."""
+def render_json(
+    resolved: dict[str, dict[str, list[DepInfo]]],
+    *,
+    mode: str = "major",
+    show_up_to_date: bool = False,
+) -> None:
+    """Print agent-friendly JSON, hiding unchanged entries unless requested."""
     output: dict = {}
     for file_label, groups in resolved.items():
         output[file_label] = {}
@@ -137,6 +142,7 @@ def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
             output[file_label][group_label] = [
                 {
                     "name": i.name,
+                    "source": i.source,
                     "current": i.current,
                     "current_spec": i.current_spec,
                     "latest": i.latest,
@@ -144,9 +150,11 @@ def render_json(resolved: dict[str, dict[str, list[DepInfo]]]) -> None:
                     "bump": i.bump,
                     "outdated": i.is_outdated,
                     "release_date": i.release_date,
+                    "current_release_date": i.current_release_date,
                     "error": i.fetch_error,
                 }
                 for i in infos
+                if show_up_to_date or i.is_shown(mode) or i.fetch_error
             ]
     console.print_json(data=output)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -11,27 +12,30 @@ from packaging.specifiers import SpecifierSet
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from taze import __version__
+from taze.actions import fetch_github_action_info, is_action_file, parse_actions, write_action_updates
+from taze.cache import load_cache, save_cache
 from taze.config import load_config, package_mode_for
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_group, render_json
 from taze.installers import install_command
 from taze.models import MODES, PRE_RELEASE_MODES, DepInfo, calc_bump
 from taze.parsers import (
-    build_name_filter,
     parse_dep_string,
     parse_project_name,
-    parse_pyproject,
+    parse_pyproject_entries,
+    parse_selectors,
+    selector_ranges,
 )
 from taze.pypi import fetch_pypi_info
 from taze.writers import write_pyproject_updates, write_requirements_updates
 
 
 if TYPE_CHECKING:
-    import re
     from collections.abc import Callable
 
 
 T = TypeVar("T")
+Entry = tuple[str, int | None] | tuple[str, int | None, dict[str, str]] | DepInfo
 
 
 app = typer.Typer(
@@ -49,7 +53,7 @@ SORT_CHOICES = ("name-asc", "name-desc", "diff-asc", "diff-desc")
 
 
 def resolve_deps(
-    entries: list[tuple[str, int | None]],
+    entries: list[tuple[str, int | None] | tuple[str, int | None, dict[str, str]] | DepInfo],
     *,
     include_pat: re.Pattern[str] | None,
     exclude_pat: re.Pattern[str] | None,
@@ -62,14 +66,32 @@ def resolve_deps(
     local_package_names: set[str],
     concurrency: int,
     on_progress: Callable[[int], None] | None = None,
+    include_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
+    exclude_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
+    maturity_exclude_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
+    cache: dict[str, dict] | None = None,
+    action_cache: dict[str, list[dict]] | None = None,
+    force: bool = False,
+    request_timeout: float = 10.0,
+    retries: int = 2,
 ) -> list[DepInfo]:
-    """Fetch latest PyPI info for all deps and return enriched DepInfo list."""
+    """Fetch registry metadata concurrently and return enriched dependencies."""
+    include_selectors = include_selectors or []
+    exclude_selectors = exclude_selectors or []
+    maturity_exclude_selectors = maturity_exclude_selectors or []
     infos: list[DepInfo] = []
-    for raw, lineno in entries:
-        info = parse_dep_string(raw, line_number=lineno)
+    for entry in entries:
+        if isinstance(entry, DepInfo):
+            info = entry
+        else:
+            raw, lineno = entry[:2]
+            metadata = entry[2] if len(entry) == 3 else {}
+            info = parse_dep_string(raw, line_number=lineno, **metadata)
         if info is None:
             continue
-        if include_pat and not include_pat.match(info.name):
+        if include_pat and not include_pat.match(info.name) and not selector_ranges(info.name, include_selectors):
+            continue
+        if not include_pat and include_selectors and not selector_ranges(info.name, include_selectors):
             continue
         if exclude_pat and exclude_pat.match(info.name):
             continue
@@ -85,26 +107,36 @@ def resolve_deps(
     if not infos:
         return infos
 
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+    workers = max(1, concurrency)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(
-                fetch_pypi_info,
-                i.name,
-                pre=pre,
-                current_version=i.current,
-                specifier=_resolution_specifier(i, mode=i.effective_mode or mode, include_locked=include_locked),
+                _fetch_info,
+                i,
                 mode=i.effective_mode or mode,
-                maturity_period=0 if maturity_exclude_pat and maturity_exclude_pat.match(i.name) else maturity_period,
+                pre=pre,
+                include_locked=include_locked,
+                maturity_period=maturity_period,
+                maturity_exclude_pat=maturity_exclude_pat,
+                maturity_exclude_ranges=selector_ranges(i.name, maturity_exclude_selectors),
+                exclude_ranges=selector_ranges(i.name, exclude_selectors),
+                include_ranges=selector_ranges(i.name, include_selectors),
+                cache=cache,
+                action_cache=action_cache,
+                force=force,
+                request_timeout=request_timeout,
+                retries=retries,
             ): i
             for i in infos
         }
         for fut in as_completed(futures):
             info = futures[fut]
             try:
-                version, latest_date, current_date = fut.result()
+                version, latest_date, current_date, target_sha = fut.result()
                 info.latest = version
                 info.release_date = latest_date
                 info.current_release_date = current_date
+                info.action_target_sha = target_sha
                 info.fetch_error = version is None
             except AttributeError, OSError, TypeError, ValueError:
                 info.fetch_error = True
@@ -113,6 +145,56 @@ def resolve_deps(
                 on_progress(1)
 
     return infos
+
+
+def _fetch_info(
+    info: DepInfo,
+    *,
+    mode: str,
+    pre: bool,
+    include_locked: bool,
+    maturity_period: int,
+    maturity_exclude_pat: re.Pattern[str] | None,
+    maturity_exclude_ranges: tuple[str, ...],
+    exclude_ranges: tuple[str, ...],
+    include_ranges: tuple[str, ...],
+    cache: dict[str, dict] | None,
+    action_cache: dict[str, list[dict]] | None,
+    force: bool,
+    request_timeout: float,
+    retries: int,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    if info.source == "github-actions":
+        return fetch_github_action_info(
+            info.action_repo or info.name,
+            current_version=info.current,
+            mode=mode,
+            pre=pre,
+            maturity_period=0 if maturity_exclude_pat and maturity_exclude_pat.match(info.name) else maturity_period,
+            exclude_ranges=exclude_ranges,
+            include_ranges=include_ranges,
+            maturity_exclude_ranges=maturity_exclude_ranges,
+            timeout=request_timeout,
+            retries=retries,
+            cache=action_cache,
+            force=force,
+        )
+    version, latest_date, current_date = fetch_pypi_info(
+        info.name,
+        pre=pre,
+        current_version=info.current,
+        specifier=_resolution_specifier(info, mode=mode, include_locked=include_locked),
+        mode=mode,
+        maturity_period=0 if maturity_exclude_pat and maturity_exclude_pat.match(info.name) else maturity_period,
+        exclude_ranges=exclude_ranges,
+        include_ranges=include_ranges,
+        maturity_exclude_ranges=maturity_exclude_ranges,
+        timeout=request_timeout,
+        retries=retries,
+        cache=cache,
+        force=force,
+    )
+    return version, latest_date, current_date, None
 
 
 def _resolution_specifier(info: DepInfo, *, mode: str, include_locked: bool) -> SpecifierSet | None:
@@ -153,6 +235,7 @@ def main(
         Path | None,
         typer.Option("--config", help="Path to a taze.toml configuration file"),
     ] = None,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Bypass the local metadata cache")] = False,
     write: Annotated[bool, typer.Option("--write", "-w", help="Write updates back to file")] = False,
     install: Annotated[
         bool,
@@ -212,8 +295,8 @@ def main(
     all_deps: Annotated[bool, typer.Option("--all", "-a", help="Show up-to-date packages too")] = False,
     group: Annotated[
         bool,
-        typer.Option("--group", help="Group dependencies by source file on display"),
-    ] = False,
+        typer.Option("--group/--no-group", help="Group dependencies by source file on display"),
+    ] = True,
     include_locked: Annotated[
         bool,
         typer.Option("--include-locked", "-l", help="Include exact (==) version pins"),
@@ -229,7 +312,7 @@ def main(
     sort: Annotated[
         str | None,
         typer.Option("--sort", help="Sort by: name-asc | name-desc | diff-asc | diff-desc"),
-    ] = None,
+    ] = "diff-asc",
     fail_on_outdated: Annotated[
         bool,
         typer.Option(
@@ -240,14 +323,34 @@ def main(
     ] = False,
     silent: Annotated[bool, typer.Option("--silent", "-s", help="No output")] = False,
     output_json: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output")] = False,
+    github_actions: Annotated[
+        bool,
+        typer.Option(
+            "--github-actions/--no-github-actions",
+            help="Check versioned GitHub Actions references",
+        ),
+    ] = True,
+    github_actions_style: Annotated[
+        str,
+        typer.Option("--github-actions-style", help="Action write style: auto | tag | sha"),
+    ] = "auto",
     version: Annotated[
         bool,
         typer.Option("--version", "-v", help="Show version and exit", is_eager=True),
     ] = False,
     concurrency: Annotated[
         int,
-        typer.Option("--concurrency", help="Number of concurrent PyPI requests"),
+        typer.Option("--concurrency", help="Number of concurrent registry requests"),
     ] = 10,
+    request_timeout: Annotated[
+        float,
+        typer.Option("--request-timeout", help="Registry request timeout in seconds"),
+    ] = 10.0,
+    retries: Annotated[
+        int,
+        typer.Option("--retry", help="Retries after a failed registry request"),
+    ] = 2,
+    no_retry: Annotated[bool, typer.Option("--no-retry", help="Disable registry retries")] = False,
 ) -> None:
     """
     🥬  [bold]taze[/bold] — keep your Python deps fresh.
@@ -277,10 +380,16 @@ def main(
     if sort and sort not in SORT_CHOICES:
         console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
         raise typer.Exit(1)
+    if github_actions_style not in ("auto", "tag", "sha"):
+        console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
+        raise typer.Exit(1)
+    if concurrency < 1 or request_timeout <= 0 or retries < 0:
+        console.print("[red]✗[/]  concurrency and request timeout must be positive; retries cannot be negative")
+        raise typer.Exit(1)
 
     if install or update:
         write = True
-    if interactive:
+    if interactive and not output_json:
         write = True
 
     pre = mode in PRE_RELEASE_MODES
@@ -296,6 +405,22 @@ def main(
     include_locked = _configured(context, "include_locked", include_locked, project_config)
     concurrency = _configured(context, "concurrency", concurrency, project_config)
     maturity_period = _configured(context, "maturity_period", maturity_period, project_config)
+    group = _configured(context, "group", group, project_config)
+    all_deps = _configured(context, "all", all_deps, project_config)
+    sort = _configured(context, "sort", sort, project_config)
+    force = _configured(context, "force", force, project_config)
+    request_timeout = _configured(context, "request_timeout", request_timeout, project_config)
+    retries = _configured(context, "retry", retries, project_config)
+    github_actions = _configured(context, "github_actions", github_actions, project_config)
+    github_actions_style = _configured(context, "github_actions_style", github_actions_style, project_config)
+    write = _configured(context, "write", write, project_config)
+    install = _configured(context, "install", install, project_config)
+    update = _configured(context, "update", update, project_config)
+    silent = _configured(context, "silent", silent, project_config)
+    fail_on_outdated = _configured(context, "fail_on_outdated", fail_on_outdated, project_config)
+    output_json = _configured(context, "output_json", output_json, project_config)
+    mode = _configured(context, "mode", mode, project_config)
+    interactive = _configured(context, "interactive", interactive, project_config)
     maturity_period_exclude = _configured(
         context,
         "maturity_period_exclude",
@@ -303,9 +428,41 @@ def main(
         project_config,
     )
     package_modes = project_config.get("package_mode", {})
-    include_pat = build_name_filter(include) if include else None
-    exclude_pat = build_name_filter(exclude) if exclude else None
-    maturity_exclude_pat = build_name_filter(maturity_period_exclude) if maturity_period_exclude else None
+    try:
+        include_pat, include_selectors = parse_selectors(include)
+        exclude_pat, exclude_selectors = parse_selectors(exclude)
+        maturity_exclude_pat, maturity_exclude_selectors = parse_selectors(maturity_period_exclude)
+    except re.error as error:
+        console.print(f"[red]✗[/]  Invalid dependency filter: {error}")
+        raise typer.Exit(1) from error
+    if mode not in MODES:
+        console.print(f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}")
+        raise typer.Exit(1)
+    pre = mode in PRE_RELEASE_MODES
+
+    if isinstance(retries, bool):
+        retries = 2 if retries else 0
+    if isinstance(github_actions, dict):
+        configured_style = github_actions.get("style")
+        if github_actions_style == "auto" and isinstance(configured_style, str):
+            github_actions_style = configured_style
+        github_actions = True
+    if install or update or (interactive and not output_json):
+        write = True
+
+    if sort and sort not in SORT_CHOICES:
+        console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
+        raise typer.Exit(1)
+    try:
+        invalid_numbers = concurrency < 1 or request_timeout <= 0 or retries < 0 or maturity_period < 0
+    except TypeError:
+        invalid_numbers = True
+    if invalid_numbers:
+        console.print("[red]✗[/]  invalid concurrency, timeout, retry, or maturity-period value")
+        raise typer.Exit(1)
+    if github_actions_style not in ("auto", "tag", "sha"):
+        console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
+        raise typer.Exit(1)
 
     # ── Collect files ─────────────────────────────────────────────────────────
     ignored = _path_patterns(ignore_paths)
@@ -314,11 +471,12 @@ def main(
         recursive=recursive,
         ignore_paths=ignored,
         ignore_other_workspaces=ignore_other_workspaces,
+        github_actions=github_actions,
     )
 
     if not target_files:
         if not silent:
-            console.print(f"[red]✗[/]  No pyproject.toml or requirements*.txt found in {root}")
+            console.print(f"[red]✗[/]  No supported dependency files found in {root}")
         raise typer.Exit(1)
 
     local_package_names: set[str] = set()
@@ -334,17 +492,23 @@ def main(
 
     # ── Build entries per file ────────────────────────────────────────────────
     # file_path → group_label → raw entries
-    raw_file_groups: dict[Path, dict[str, list[tuple[str, int | None]]]] = {}
+    raw_file_groups: dict[Path, dict[str, list[Entry]]] = {}
 
     for file_path in target_files:
         if file_path.name == "pyproject.toml":
             try:
-                raw_groups = parse_pyproject(file_path)
+                raw_groups = parse_pyproject_entries(file_path)
             except (AttributeError, OSError, TypeError, ValueError) as e:
                 if not silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
-            raw_file_groups[file_path] = {label: [(s, None) for s in deps] for label, deps in raw_groups.items()}
+            raw_file_groups[file_path] = {
+                label: [(raw, None, metadata) for raw, metadata in entries] for label, entries in raw_groups.items()
+            }
+        elif is_action_file(file_path):
+            action_infos = parse_actions(file_path)
+            if action_infos:
+                raw_file_groups[file_path] = {"github-actions": cast(list[Entry], action_infos)}
         else:
             try:
                 lines = file_path.read_text(encoding="utf-8").splitlines()
@@ -365,17 +529,19 @@ def main(
 
     total_packages = sum(len(entries) for groups in raw_file_groups.values() for entries in groups.values())
 
-    # ── Resolve (fetch PyPI) ──────────────────────────────────────────────────
+    # ── Resolve registry metadata ────────────────────────────────────────────
+    registry_cache = load_cache(force=force)
+    action_cache: dict[str, list[dict]] = {}
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
     with Progress(
-        TextColumn("[dim]Checking packages on PyPI…[/]"),
+        TextColumn("[dim]Checking packages on registries…[/]"),
         BarColumn(),
         MofNCompleteColumn(),
         TimeElapsedColumn(),
         console=console,
         transient=True,
-        disable=silent,
+        disable=silent or output_json,
     ) as progress:
         task_id = progress.add_task("checking", total=total_packages)
 
@@ -398,11 +564,42 @@ def main(
                     local_package_names=local_package_names,
                     concurrency=concurrency,
                     on_progress=on_progress,
+                    include_selectors=include_selectors,
+                    exclude_selectors=exclude_selectors,
+                    maturity_exclude_selectors=maturity_exclude_selectors,
+                    cache=registry_cache,
+                    action_cache=action_cache,
+                    force=force,
+                    request_timeout=request_timeout,
+                    retries=0 if no_retry else retries,
                 )
+
+    save_cache(registry_cache)
 
     # ── JSON output ───────────────────────────────────────────────────────────
     if output_json:
-        render_json({str(fp): grps for fp, grps in resolved.items()})
+        render_json(
+            {str(fp): grps for fp, grps in resolved.items()},
+            mode=mode,
+            show_up_to_date=all_deps,
+        )
+        if write:
+            for file_path, groups in resolved.items():
+                if is_action_file(file_path):
+                    write_action_updates(
+                        file_path,
+                        [info for infos in groups.values() for info in infos],
+                        mode=mode,
+                        style=github_actions_style,
+                    )
+                elif file_path.name == "pyproject.toml":
+                    write_pyproject_updates(file_path, groups, mode=mode)
+                else:
+                    write_requirements_updates(
+                        file_path,
+                        [info for infos in groups.values() for info in infos],
+                        mode=mode,
+                    )
         total_outdated = _count_outdated(resolved, mode)
         raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
 
@@ -475,35 +672,29 @@ def main(
             else:
                 filtered = groups
 
-            if file_path.name == "pyproject.toml":
+            if is_action_file(file_path):
+                flat = [i for infos in filtered.values() for i in infos]
+                updated = write_action_updates(file_path, flat, mode=mode, style=github_actions_style)
+            elif file_path.name == "pyproject.toml":
                 updated = write_pyproject_updates(file_path, filtered, mode=mode)
             else:
                 flat = [i for infos in filtered.values() for i in infos]
                 updated = write_requirements_updates(file_path, flat, mode=mode)
 
+            total_written += updated
             if updated and not silent:
                 console.print(f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to [cyan]{file_path.name}[/]")
-                total_written += updated
 
         if total_written and not silent:
             console.print()
+            if not install and not update:
+                command_text = " ".join(
+                    install_command(next((fp.parent for fp in resolved if fp.name == "pyproject.toml"), root))
+                )
+                console.print(f"  [dim]Run [cyan]{command_text}[/] to install the updates.[/]")
     elif not silent:
         console.print(f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]")
         console.print()
-
-    # ── Prompt to install after -w (unless -i/-u already set) ───────────────
-    if write and not install and not update and not silent and total_written > 0:
-        command_text = " ".join(
-            install_command(next((fp.parent for fp in resolved if fp.name == "pyproject.toml"), root))
-        )
-        console.print(f"  [dim]Run [cyan]{command_text}[/] now? [bold](y/N)[/] [/]", end="")
-        try:
-            answer = input().strip().lower()
-        except EOFError, KeyboardInterrupt:
-            answer = ""
-            console.print()
-        if answer == "y":
-            install = True
 
     # ── Lockfile-aware install ───────────────────────────────────────────────
     if install or update:

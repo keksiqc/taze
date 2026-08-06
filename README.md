@@ -2,7 +2,7 @@
 
 Keep your Python dependencies fresh.
 
-Inspired by [taze](https://github.com/antfu-collective/taze) for Node.js — ported to the Python ecosystem with support for `pyproject.toml` and `requirements.txt`.
+Inspired by [taze](https://github.com/antfu-collective/taze), this is the Python-native version: the same safe-by-default CLI workflow, adapted for PyPI, PEP 440, Python project metadata, and GitHub Actions.
 
 ---
 
@@ -11,14 +11,16 @@ Inspired by [taze](https://github.com/antfu-collective/taze) for Node.js — por
 - Checks all dependencies against PyPI in parallel
 - Shows the bump level (patch / minor / **MAJOR**) with colors
 - Displays release age for both the current and latest version
-- Supports `pyproject.toml` (PEP 508, PEP 735, uv, PDM, Hatch) and `requirements*.txt`
+- Supports `pyproject.toml` (PEP 508, PEP 735, uv, Poetry, PDM, and Hatch) and `requirements*.txt`
 - Writes updated version constraints back to the file (`-w`)
 - Detects uv, Poetry, PDM, and Pixi before installing (`-i`)
 - Interactive package selection (`-I`)
 - Recursive monorepo scanning (`-r`)
 - Pre-release support (`newest` / `next` mode)
-- Regex filtering for include / exclude
-- Safe PEP 440 range resolution, maturity periods, and per-package policies
+- Regex/glob filtering for include / exclude, including version selectors such as `requests@2`
+- Checks GitHub Actions refs with tag or SHA-preserving writes
+- JSON output for agents and CI, with optional fail-on-outdated status
+- Safe PEP 440 range resolution, a local TTL cache, maturity periods, and per-package policies
 
 ---
 
@@ -83,6 +85,9 @@ taze -n requests,httpx
 # Skip packages matching a pattern
 taze -x /^pytest/
 
+# Skip only one version range, not the whole package
+taze -x requests@3
+
 # Do not upgrade releases published in the last two weeks
 taze --maturity-period 14
 
@@ -122,7 +127,16 @@ taze --json
                             Bypass the maturity period for selected packages
       --config <path>      Read settings from a taze.toml file
       --concurrency <n>    Number of concurrent PyPI requests (default: 10)
-      --json               Machine-readable JSON output
+      --json               Machine-readable JSON output (updates only; use -a for all)
+      --force, -f          Bypass the local metadata cache
+      --retry <n>          Retries after failed registry requests
+      --no-retry           Disable registry retries
+      --request-timeout <s>
+                            Registry request timeout in seconds
+      --github-actions/--no-github-actions
+                            Check workflow and composite-action references
+      --github-actions-style <auto|tag|sha>
+                            Preserve or choose action reference style
 ```
 
 ---
@@ -155,9 +169,13 @@ The age columns show how old the **current** pinned version is and how recently 
 | `pyproject.toml`    | `[project.optional-dependencies.*]` |
 | `pyproject.toml`    | `[dependency-groups.*]` (PEP 735)   |
 | `pyproject.toml`    | `[tool.uv.dev-dependencies]`        |
+| `pyproject.toml`    | `[tool.uv.constraint-dependencies]` |
+| `pyproject.toml`    | `[tool.poetry.dependencies]`        |
+| `pyproject.toml`    | `[tool.poetry.group.*.dependencies]` |
 | `pyproject.toml`    | `[tool.pdm.dev-dependencies.*]`     |
 | `pyproject.toml`    | `[tool.hatch.envs.*.dependencies]`  |
 | `requirements*.txt` | Standard pip format                 |
+| `.github/workflows/*.yml` / `action.yml` | Versioned `uses:` refs |
 
 ---
 
@@ -190,8 +208,14 @@ django = "minor"
 setuptools = "ignore"
 ```
 
-`package-mode` accepts every mode listed above, plus `ignore`. Exact package names
-and slash-delimited regular expressions are supported.
+`package-mode` accepts every mode listed above, plus `ignore`. Exact package names,
+`*` globs, and slash-delimited regular expressions are supported. The cache lives
+at `$XDG_CACHE_HOME/taze/pypi.json` (or `~/.cache/taze/pypi.json`) for 30 minutes;
+`--force` bypasses it.
+
+GitHub Actions use the GitHub REST API. Set `GITHUB_TOKEN` or `GH_TOKEN` to avoid
+unauthenticated API limits. Branch refs, local actions, Docker actions, and
+non-`v` tags are left untouched.
 
 ## Installation
 

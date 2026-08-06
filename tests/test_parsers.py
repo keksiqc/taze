@@ -10,6 +10,9 @@ from taze.parsers import (
     parse_dep_string,
     parse_project_name,
     parse_pyproject,
+    parse_pyproject_entries,
+    parse_selectors,
+    selector_ranges,
 )
 
 
@@ -36,7 +39,7 @@ def test_parse_dep_string(raw, name, current, operator) -> None:
     assert (dep.name, dep.current, dep.operator) == (name, current, operator)
 
 
-@pytest.mark.parametrize("raw", ["# this is a comment", "   ", "-r base.txt"])
+@pytest.mark.parametrize("raw", ["# this is a comment", "   ", "-r base.txt", "local @ file:///tmp/local"])
 def test_parse_dep_string_skips_non_dependencies(raw) -> None:
     assert parse_dep_string(raw) is None
 
@@ -113,6 +116,18 @@ class TestParsePyproject:
         )
         assert parse_pyproject(p)["hatch:test"] == ["pytest>=7"]
 
+    def test_poetry_dependencies_are_converted(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [tool.poetry.dependencies]
+            requests = "^2.0"
+            """,
+        )
+        entries = parse_pyproject_entries(p)["poetry"]
+        assert entries[0][0] == "requests>=2.0,<3.0"
+        assert entries[0][1]["toml_value"] == "^2.0"
+
     def test_empty_project(self, tmp_path) -> None:
         p = self._write(tmp_path, "[project]\nname = 'foo'\n")
         assert parse_pyproject(p) == {}
@@ -148,6 +163,12 @@ class TestBuildNameFilter:
         assert pat.match("botocore")
         assert not pat.match("requests")
 
+    def test_regex_pattern_matches_substrings(self) -> None:
+        pat = build_name_filter("/http/")
+        assert pat is not None
+        assert pat.match("httpx")
+        assert not pat.match("requests")
+
     def test_underscore_normalised(self) -> None:
         pat = build_name_filter("my_package")
         assert pat is not None
@@ -156,3 +177,8 @@ class TestBuildNameFilter:
     def test_empty_returns_none(self) -> None:
         assert build_name_filter("") is None
         assert build_name_filter("  ,  ") is None
+
+    def test_version_selector_does_not_exclude_whole_package(self) -> None:
+        pattern, selectors = parse_selectors("requests@2")
+        assert pattern is None
+        assert selector_ranges("requests", selectors) == ("2",)
