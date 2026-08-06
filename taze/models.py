@@ -16,13 +16,6 @@ BUMP_COLOR: dict[str, str] = {
     "same": "dim",
     "?": "dim",
 }
-BUMP_BADGE: dict[str, str] = {
-    "major": "[bold red]MAJOR[/]",
-    "minor": "[cyan]minor[/]",
-    "patch": "[green]patch[/]",
-    "same": "[dim]up to date[/]",
-    "?": "[dim]?[/]",
-}
 
 MODES = ("default", "major", "latest", "stable", "minor", "patch", "newest", "next")
 PRE_RELEASE_MODES = {"newest", "next"}

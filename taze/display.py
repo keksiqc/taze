@@ -12,7 +12,7 @@ from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
-from taze.models import BUMP_BADGE, BUMP_COLOR, BUMP_ORDER, DepInfo, calc_bump
+from taze.models import BUMP_COLOR, BUMP_ORDER, DepInfo, calc_bump
 
 
 console = Console()
@@ -61,9 +61,9 @@ def _colorize_diff(current_spec: str, latest_spec: str, color: str) -> Text:
     if lat_op:
         text.append(lat_op, style="yellow" if lat_op != cur_op else "dim")
     if unchanged:
-        text.append(unchanged, style="dim")
+        text.append(unchanged)
         if changed:
-            text.append(".", style="dim")
+            text.append(".")
     text.append(changed, style=f"bold {color}")
     return text
 
@@ -81,7 +81,7 @@ def _bump_counts_text(counts: dict[str, int], *, empty: tuple[str, str]) -> Text
         if not first:
             text.append(", ", style="dim")
         text.append(str(counts[bump]), style=BUMP_COLOR.get(bump, "dim"))
-        text.append(f" {bump}", style="dim")
+        text.append(f" {bump}")
         first = False
     return text
 
@@ -92,7 +92,8 @@ def render_file_header(label: str, infos: list[DepInfo], mode: str) -> Text:
     for info in infos:
         if info.is_shown(mode):
             counts[info.bump] = counts.get(info.bump, 0) + 1
-    header = Text(label, style="bold cyan")
+    header = Text()
+    header.append(label, style="bold cyan")
     header.append(" - ", style="dim")
     header.append_text(_bump_counts_text(counts, empty=("up to date", "dim green")))
     return header
@@ -147,16 +148,14 @@ def render_group(
         show_edge=False,
     )
     table.add_column("name", style="bold", no_wrap=True, min_width=name_width)
-    table.add_column("cur_age", style="dim", no_wrap=True, min_width=cur_age_width, justify="right")
+    table.add_column("cur_age", no_wrap=True, min_width=cur_age_width, justify="right")
     table.add_column("current", style="dim", no_wrap=True, min_width=spec_width, justify="right")
     table.add_column("arrow", no_wrap=True)
     table.add_column("latest", no_wrap=True, min_width=latest_spec_width, justify="right")
-    table.add_column("lat_age", style="dim", no_wrap=True, min_width=lat_age_width, justify="right")
-    table.add_column("badge", no_wrap=True)
+    table.add_column("lat_age", no_wrap=True, min_width=lat_age_width, justify="right")
 
     for info in visible:
         color = BUMP_COLOR.get(info.bump, "dim")
-        badge = BUMP_BADGE.get(info.bump, "")
         cur_age, cur_age_color = _age(info.current_release_date)
         lat_age, lat_age_color = _age(info.release_date)
 
@@ -168,7 +167,6 @@ def render_group(
                 Text("→", style="dim"),
                 Text("fetch failed", style="dim red"),
                 "",
-                "",
             )
         elif info.bump == "same":
             table.add_row(
@@ -178,17 +176,15 @@ def render_group(
                 Text("·", style="dim"),
                 Text(info.current_spec, style="dim"),
                 "",
-                "",
             )
         else:
             table.add_row(
                 info.name,
                 Text(cur_age, style=cur_age_color),
                 Text(info.current_spec, style="dim"),
-                Text("→", style=color),
+                Text("→", style="dim"),
                 _colorize_diff(info.current_spec, info.latest_spec, color),
                 Text(lat_age, style=lat_age_color),
-                Text.from_markup(badge),
             )
 
     console.print(Padding(table, (0, 0, 0, 4)))
@@ -255,12 +251,9 @@ def _interactive_numbers(outdated: list[DepInfo]) -> list[DepInfo]:
     console.print("  [bold]Select packages to update:[/]")
     for idx, info in enumerate(outdated, 1):
         color = BUMP_COLOR.get(info.bump, "dim")
-        badge = BUMP_BADGE.get(info.bump, "")
-        console.print(
-            f"  [dim]{idx:>2}.[/]  [bold]{info.name}[/]  "
-            f"[dim]{info.current_spec}[/] [dim]→[/] "
-            f"[bold {color}]{info.latest_spec}[/]  {badge}",
-        )
+        line = Text.from_markup(f"  [dim]{idx:>2}.[/]  [bold]{info.name}[/]  [dim]{info.current_spec}[/] [dim]→[/] ")
+        line.append_text(_colorize_diff(info.current_spec, info.latest_spec, color))
+        console.print(line)
     console.print()
     console.print(
         "  [dim]Enter numbers (e.g. [cyan]1,3[/]), [cyan]a[/] for all, or press Enter to skip:[/] ",
@@ -461,7 +454,8 @@ def _menu_body(
             for info, position in zip(file_infos, file_range, strict=True):
                 if position in selected:
                     counts[info.bump] = counts.get(info.bump, 0) + 1
-            header = Text(file_label, style="bold cyan")
+            header = Text()
+            header.append(file_label, style="bold cyan")
             header.append(" - ", style="dim")
             header.append_text(_bump_counts_text(counts, empty=("no change", "dim")))
             body.append((header, None))
@@ -531,16 +525,11 @@ def _menu_dependency_line(
     line.append("  ")
     _append_cell(line, info.current_spec, current_width, "dim", align="right")
     line.append("  ")
-    line.append("→" if checked else "·", style=color if checked else "dim")
+    line.append("→" if checked else "·", style="dim")
     line.append("  ")
     _append_diff_cell(line, info.current_spec, info.latest_spec, color, latest_width, checked)
     line.append("  ")
     _append_cell(line, latest_age, latest_age_width, latest_age_color if checked else "dim", align="right")
-    line.append("  ")
-    line.append(
-        {"major": "MAJOR", "minor": "minor", "patch": "patch"}.get(info.bump, "?"),
-        style=f"bold {color}" if checked else "dim",
-    )
     return line
 
 
@@ -560,8 +549,7 @@ def _version_menu_lines(info: DepInfo, versions: list[str], cursor: int) -> list
         _append_cell(line, version, width, "bold" if focused else "dim")
         line.append("  ")
         line.append(info.current_spec, style="dim")
-        line.append("  →  ", style=color if focused else "dim")
+        line.append("  →  ", style="dim")
         line.append(version, style=f"bold {color}" if focused else "dim")
-        line.append(f"  {bump}", style=color if focused else "dim")
         lines.append(line)
     return lines
