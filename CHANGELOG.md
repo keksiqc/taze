@@ -1,3 +1,9 @@
+## 0.4.1 (2026-08-07)
+
+### Fix
+
+- **release**: use correct GitHub expression syntax for tag name
+
 ## 0.4.0 (2026-08-07)
 
 ### Feat
