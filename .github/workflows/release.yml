@@ -32,4 +32,6 @@ jobs:
         run: cz changelog --dry-run "${{ github.ref_name }}" > .changelog.md
 
       - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ github.ref_name }}" --notes-file .changelog.md
