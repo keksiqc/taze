@@ -1,3 +1,9 @@
+## 0.4.2 (2026-08-07)
+
+### Fix
+
+- **release**: add GH_TOKEN to use gh cli
+
 ## 0.4.1 (2026-08-07)
 
 ### Fix
