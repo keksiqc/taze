@@ -145,13 +145,45 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = json.loads(resp.read())
-            return data if isinstance(data, dict) else None
+            return _slim(data) if isinstance(data, dict) else None
         except URLError, OSError, ValueError:
             if attempt >= retries:
                 return None
             delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1] * 2 ** (attempt - 1)
             time.sleep(delay)
     return None
+
+
+def _slim(data: dict) -> dict:
+    """Drop the per-file hashes/URLs/sizes PyPI's JSON API includes but we never read.
+
+    A full response can run into the megabytes per package (every hash digest,
+    download URL, and filename for every file of every release ever
+    published), which slows down both persisting and re-parsing the local
+    cache. Keeping only the fields ``fetch_pypi_info`` actually consumes cuts
+    that down by roughly an order of magnitude.
+    """
+    info = data.get("info")
+    releases = data.get("releases")
+    slim_info = {
+        "version": info.get("version") if isinstance(info, dict) else None,
+        "requires_python": info.get("requires_python") if isinstance(info, dict) else None,
+    }
+    slim_releases: dict[str, list[dict]] = {}
+    if isinstance(releases, dict):
+        for version, files in releases.items():
+            if not isinstance(files, list):
+                continue
+            slim_releases[version] = [
+                {
+                    "requires_python": file.get("requires_python"),
+                    "upload_time": file.get("upload_time") or file.get("upload_time_iso_8601"),
+                    "yanked": bool(file.get("yanked")),
+                }
+                for file in files
+                if isinstance(file, dict)
+            ]
+    return {"info": slim_info, "releases": slim_releases}
 
 
 def normalise_version_ranges(ranges: tuple[str, ...] | list[str]) -> tuple[SpecifierSet, ...]:
