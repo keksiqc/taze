@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 
 from rich.console import Console
+from rich.text import Text
 
 from taze import display
 from taze.models import DepInfo
@@ -43,3 +44,27 @@ def test_interactive_select_accepts_numbers_and_ranges(monkeypatch) -> None:
     infos = [DepInfo(str(i), str(i), None, None) for i in range(1, 5)]
     monkeypatch.setattr("builtins.input", lambda: "1,3-4")
     assert display.interactive_select(infos) == [infos[0], infos[2], infos[3]]
+
+
+def test_interactive_menu_renders_checked_cursor() -> None:
+    info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
+    lines = display._menu_lines([info], 0, {0})
+    plain = "\n".join(line.plain for line in lines if isinstance(line, Text))
+    assert "◉" in plain
+    assert "❯" in plain
+
+
+def test_version_menu_lists_alternatives() -> None:
+    info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
+    lines = display._version_menu_lines(info, ["3", "2.9"], 0)
+    plain = "\n".join(line.plain for line in lines)
+    assert "Select a version for requests" in plain
+    assert "2.9" in plain
+
+
+def test_interactive_menu_renders_categories() -> None:
+    info = DepInfo("requests>=2", "requests", "2", ">=", latest="3", bump="major")
+    lines = display._menu_lines([info], 0, {0}, [("pyproject.toml", [("dependencies", [info])])])
+    plain = "\n".join(line.plain for line in lines if isinstance(line, Text))
+    assert "pyproject.toml" in plain
+    assert "dependencies" in plain

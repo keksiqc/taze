@@ -19,3 +19,7 @@ class TestInstallCommand:
     def test_detects_pixi(self, tmp_path) -> None:
         (tmp_path / "pixi.toml").touch()
         assert install_command(tmp_path) == ["pixi", "install"]
+
+    def test_installs_requirements_without_pyproject(self, tmp_path) -> None:
+        (tmp_path / "requirements-dev.txt").touch()
+        assert install_command(tmp_path) == ["uv", "pip", "install", "-r", "requirements-dev.txt"]

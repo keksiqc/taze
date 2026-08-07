@@ -11,17 +11,10 @@ BUMP_ORDER: dict[str, int] = {"major": 3, "minor": 2, "patch": 1, "same": 0, "?"
 
 BUMP_COLOR: dict[str, str] = {
     "major": "red",
-    "minor": "yellow",
+    "minor": "cyan",
     "patch": "green",
     "same": "dim",
     "?": "dim",
-}
-BUMP_BADGE: dict[str, str] = {
-    "major": "[bold red]MAJOR[/]",
-    "minor": "[yellow]minor[/]",
-    "patch": "[green]patch[/]",
-    "same": "[dim]up to date[/]",
-    "?": "[dim]?[/]",
 }
 
 MODES = ("default", "major", "latest", "stable", "minor", "patch", "newest", "next")
@@ -30,13 +23,21 @@ PRE_RELEASE_MODES = {"newest", "next"}
 MODE_CEILING = {"minor": 2, "patch": 1}
 
 
+def _version(value: str) -> Version:
+    """Parse Python versions and the partial ``v4`` tags used by actions."""
+    value = value.strip().lstrip("vV")
+    if re.fullmatch(r"\d+(?:\.\d+){0,1}", value):
+        value += ".0" * (3 - value.count(".") - 1)
+    return Version(value)
+
+
 def calc_bump(current: str | None, latest: str | None) -> str:
     """Return the bump level between current and latest version strings."""
     if not current or not latest:
         return "?"
     try:
-        c = Version(current)
-        la = Version(latest)
+        c = _version(current)
+        la = _version(latest)
     except InvalidVersion:
         return "?"
     if la <= c:
@@ -68,10 +69,22 @@ class DepInfo:
     bump: str = "?"
     fetch_error: bool = False
     effective_mode: str | None = None
+    source: str = "dependencies"
+    toml_section: str | None = None
+    toml_key: str | None = None
+    toml_value: str | None = None
+    action_repo: str | None = None
+    action_subpath: str = ""
+    action_style: str | None = None
+    action_sha: str | None = None
+    action_target_sha: str | None = None
+    available_versions: tuple[str, ...] = ()
 
     @property
     def current_spec(self) -> str:
         """Return the current version specifier string, e.g. '>=1.2.3'."""
+        if self.source == "github-actions" and self.current:
+            return self.current
         if self.operator and self.current:
             return f"{self.operator}{self.current}"
         return "(any)"
@@ -81,13 +94,13 @@ class DepInfo:
         """Return the latest version as a specifier string, e.g. '>=2.0.0'."""
         if not self.latest:
             return "—"
-        if self.operator:
-            if self.operator == "~=":
-                n = len(self.current.split(".")) if self.current else 2
-                parts = self.latest.split(".")[:n]
-                return f"~={'.'.join(parts)}"
-            return f"{self.operator}{self.latest}"
-        return self.latest
+        if self.source == "github-actions" or not self.operator:
+            return self.latest
+        if self.operator == "~=":
+            n = len(self.current.split(".")) if self.current else 2
+            parts = self.latest.split(".")[:n]
+            return f"~={'.'.join(parts)}"
+        return f"{self.operator}{self.latest}"
 
     @property
     def is_outdated(self) -> bool:

@@ -1,3 +1,23 @@
+## 0.3.0 (2026-08-07)
+
+### Feat
+
+- improve cache
+- improve config management
+- action updating and pinning
+- align interactive tui with upstream
+- polish interactive tui
+- align Python taze with upstream features
+
+### Fix
+
+- mode help message
+- remove help comment
+- align tui styling with upstream
+- group interactive dependencies
+- mirror upstream interactive selector
+- add interactive selection menu
+
 ## 0.2.5 (2026-07-29)
 
 ### Refactor

@@ -41,6 +41,21 @@ class TestWritePyprojectUpdates:
         assert count == 1
         assert "requests>=3.0.0" in p.read_text()
 
+    def test_updates_poetry_inline_table(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [tool.poetry.dependencies]
+            requests = {version = "^2.0", optional = true}
+            """,
+        )
+        dep = _dep("requests>=2.0,<3.0", "requests", "2.0", "2.32.0", ">=", "minor")
+        dep.toml_section = "tool.poetry.dependencies"
+        dep.toml_key = "requests"
+        dep.toml_value = "^2.0"
+        assert write_pyproject_updates(p, {"poetry": [dep]}) == 1
+        assert 'version = "^2.32"' in p.read_text()
+
     def test_skips_up_to_date(self, tmp_path) -> None:
         p = self._write(
             tmp_path,

@@ -100,6 +100,17 @@ class TestFetchPypiInfo:
         version, _, _ = self._fetch(data=data)
         assert version is None
 
+    def test_skips_release_incompatible_with_current_python(self) -> None:
+        data = {
+            "info": {"version": "2.0.0", "requires_python": ">=99"},
+            "releases": {
+                "1.0.0": [{"upload_time": "2024-01-01T00:00:00", "requires_python": ">=3.0"}],
+                "2.0.0": [{"upload_time": "2024-01-01T00:00:00", "requires_python": ">=99"}],
+            },
+        }
+        version, _, _ = self._fetch(data=data)
+        assert version == "1.0.0"
+
     def test_returns_release_date(self) -> None:
         _, latest_date, _ = self._fetch()
         assert latest_date == "2024-03-10"
