@@ -432,23 +432,6 @@ def main(
     ] = 2,
     no_retry: Annotated[bool, typer.Option("--no-retry", help="Disable registry retries")] = False,
 ) -> None:
-    """
-    🥬  [bold]taze[/bold] — keep your Python deps fresh.
-
-    Reads [cyan]pyproject.toml[/] and/or [cyan]requirements*.txt[/], checks PyPI for
-    newer versions, and shows a grouped diff.
-
-    [dim]Examples:[/dim]
-      [cyan]taze[/]                       check everything (default mode)
-      [cyan]taze minor[/]                 only show minor and patch updates
-      [cyan]taze patch -w[/]              write patch updates back to file
-      [cyan]taze newest -I[/]             interactive, including pre-releases
-      [cyan]taze -r[/]                    scan subdirectories recursively
-      [cyan]taze -x pytest,ruff[/]        skip specific packages
-      [cyan]taze -n /^boto/[/]            only packages matching regex
-
-      [cyan]taze --sort diff-desc[/]      biggest updates first
-    """
     if version:
         console.print(f"taze/{__version__}")
         raise typer.Exit(0)
