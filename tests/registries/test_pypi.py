@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from packaging.specifiers import SpecifierSet
 
-from taze.pypi import _is_mature, _upload_date, fetch_pypi_info
+from taze.registries.pypi import _is_mature, _upload_date, fetch_pypi_info
 
 
 FAKE_RELEASES = {
@@ -78,7 +78,7 @@ class TestFetchPypiInfo:
                 "2.0.0": [{"upload_time": "2024-01-15T00:00:00", "yanked": False}],
             },
         }
-        with patch("taze.pypi.datetime") as mock_datetime:
+        with patch("taze.registries.pypi.datetime") as mock_datetime:
             mock_datetime.now.return_value.date.return_value = date(2024, 1, 20)
             version, _, _ = self._fetch(data=data, maturity_period=7)
         assert version == "1.0.0"

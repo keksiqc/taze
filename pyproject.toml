@@ -55,7 +55,7 @@ unsafe-fixes = true
 line-length = 120
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN", "D", "S101"]
+"tests/**/*.py" = ["ANN", "D", "S101"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]

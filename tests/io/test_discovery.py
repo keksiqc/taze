@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from taze.discovery import discover_files
+from taze.io.discovery import discover_files
 
 
 def _project(path) -> None:

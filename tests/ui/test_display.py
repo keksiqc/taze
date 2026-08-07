@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from rich.console import Console
 from rich.text import Text
 
-from taze import display
 from taze.models import DepInfo
+from taze.ui import display
 
 
 def test_age_returns_text_and_color() -> None:

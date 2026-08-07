@@ -3,8 +3,8 @@ from __future__ import annotations
 import textwrap
 from typing import TYPE_CHECKING
 
+from taze.io.writers import write_pyproject_updates, write_requirements_updates
 from taze.models import DepInfo
-from taze.writers import write_pyproject_updates, write_requirements_updates
 
 
 if TYPE_CHECKING:

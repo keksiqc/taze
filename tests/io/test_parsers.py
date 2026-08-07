@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from taze.parsers import (
+from taze.io.parsers import (
     build_name_filter,
     parse_dep_string,
     parse_project_name,

@@ -1,4 +1,4 @@
-"""Small TTL cache for registry responses."""
+"""Read and write the local registry response cache."""
 
 from __future__ import annotations
 
