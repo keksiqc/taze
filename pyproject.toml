@@ -4,6 +4,11 @@ version = "0.3.0"
 description = "🥬 Keep your Python deps fresh"
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+]
 dependencies = [
   "packaging>=26.3",
   "pydantic-settings[toml]>=2.15.0",
@@ -63,8 +68,8 @@ indent-style = "space"
 quote-style = "double"
 
 [tool.taze]
-github_actions_pin = true
-github_actions_style = "sha"
+github-actions-pin = true
+github-actions-style = "sha"
 
 [tool.tombi.files]
 exclude = ["uv.lock"]
