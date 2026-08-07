@@ -95,7 +95,7 @@ def load_config(root: Path, config_path: Path | None = None) -> dict[str, Any]:
         return {}
 
     class ProjectConfig(TazeConfig):
-        model_config = SettingsConfigDict(pyproject_toml_table_header=("tool", "taze"))
+        model_config = SettingsConfigDict(env_prefix="TAZE_", pyproject_toml_table_header=("tool", "taze"))
 
         @classmethod
         def settings_customise_sources(

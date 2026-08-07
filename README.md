@@ -194,7 +194,7 @@ packages and are not looked up on PyPI.
 ## Configuration
 
 Place options in `taze.toml` or in the `[tool.taze]` table of `pyproject.toml`.
-Precedence is CLI, environment variables, `taze.toml`, then `pyproject.toml`.
+Precedence is CLI, `TAZE_`-prefixed environment variables, `taze.toml`, then `pyproject.toml`.
 
 ```toml
 [tool.taze]

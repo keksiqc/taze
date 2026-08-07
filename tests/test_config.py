@@ -4,7 +4,8 @@ from taze.config import load_config, package_mode_for
 
 
 class TestLoadConfig:
-    def test_loads_taze_toml(self, tmp_path) -> None:
+    def test_loads_taze_toml(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
         (tmp_path / "taze.toml").write_text('include = "httpx"\nconcurrency = 4\noutput_json = true\nunknown = true\n')
         assert load_config(tmp_path) == {"include": "httpx", "concurrency": 4, "output_json": True}
 
@@ -21,7 +22,7 @@ class TestLoadConfig:
 
     def test_prefers_environment_over_toml(self, tmp_path, monkeypatch) -> None:
         (tmp_path / "taze.toml").write_text('include = "toml"\n')
-        monkeypatch.setenv("INCLUDE", "env")
+        monkeypatch.setenv("TAZE_INCLUDE", "env")
         assert load_config(tmp_path)["include"] == "env"
 
 
