@@ -1,3 +1,11 @@
+## 0.4.3 (2026-08-07)
+
+### Fix
+
+- add fetch-depth to checkout
+- add prefix to env variables
+- add python-version to commitizen setup
+
 ## 0.4.2 (2026-08-07)
 
 ### Fix
