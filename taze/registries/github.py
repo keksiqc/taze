@@ -1,4 +1,4 @@
-"""GitHub Actions references, kept dependency-free for the Python port."""
+"""Resolve GitHub Action versions and commit SHAs."""
 
 from __future__ import annotations
 
@@ -11,83 +11,11 @@ import time
 import urllib.request
 from collections.abc import MutableMapping
 from datetime import UTC, datetime
-from pathlib import Path
 from urllib.error import URLError
 
 from packaging.version import InvalidVersion, Version
 
-from taze.models import DepInfo
-
-
-_ACTION_LINE = re.compile(
-    r"^(?P<prefix>\s*(?:-\s*)?(?:uses|['\"]uses['\"])\s*:\s*)(?P<quote>['\"]?)(?P<value>[^'\"\s#]+)(?P=quote)(?P<comment>\s+#.*)?$",
-)
-_VERSION_RE = re.compile(r"\bv?\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?\b", re.IGNORECASE)
-_SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
-
-
-def is_action_file(path: Path) -> bool:
-    relative = path.as_posix()
-    return (
-        re.search(r"(?:^|/)\.github/workflows/[^/]+\.ya?ml$", relative) is not None
-        or re.search(r"(?:^|/)\.github/actions/(?:.*/)?action\.ya?ml$", relative) is not None
-        or bool(re.search(r"(?:^|/)action\.ya?ml$", relative))
-    )
-
-
-def parse_actions(path: Path) -> list[DepInfo]:
-    """Parse versioned ``uses:`` entries without reserialising the YAML file."""
-    # ponytail: line parser preserves YAML formatting; use a YAML parser if
-    # flow-style or folded ``uses`` values need to be supported.
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError, UnicodeError:
-        return []
-
-    result: list[DepInfo] = []
-    for line_number, line in enumerate(lines, 1):
-        match = _ACTION_LINE.match(line)
-        if not match:
-            continue
-        parsed = _parse_reference(match.group("value"), match.group("comment"))
-        if not parsed:
-            continue
-        repo, subpath, version, style, sha = parsed
-        result.append(
-            DepInfo(
-                raw=match.group("value"),
-                name=repo.lower(),
-                current=version,
-                operator=None,
-                line_number=line_number,
-                source="github-actions",
-                action_repo=repo,
-                action_subpath=subpath,
-                action_style=style,
-                action_sha=sha,
-            ),
-        )
-    return result
-
-
-def _parse_reference(value: str, comment: str | None) -> tuple[str, str, str, str, str | None] | None:
-    if value.startswith(("./", "../", "docker://")) or "@" not in value:
-        return None
-    target, ref = value.rsplit("@", 1)
-    parts = target.split("/")
-    if len(parts) < 2 or not all(parts[:2]):
-        return None
-    repo = "/".join(parts[:2])
-    subpath = "/" + "/".join(parts[2:]) if len(parts) > 2 else ""
-
-    if _SHA_RE.fullmatch(ref):
-        match = _VERSION_RE.search(comment or "")
-        if not match:
-            return None
-        return repo, subpath, _version_tag(match.group()), "sha", ref
-    if not ref.lower().startswith("v") or _parse_version(ref) is None:
-        return None
-    return repo, subpath, ref, "tag", None
+from taze.registries.pypi import normalise_version_ranges
 
 
 def fetch_github_action_info(
@@ -124,19 +52,19 @@ def fetch_github_action_info(
         tag = item.get("name")
         if not isinstance(tag, str) or not tag.lower().startswith("v"):
             continue
-        version = _parse_version(tag)
+        version = parse_action_version(tag)
         if version is None or (not pre and version.is_prerelease):
             continue
         sha = item.get("commit", {}).get("sha") if isinstance(item.get("commit"), dict) else None
         candidates.append((version, tag, sha if isinstance(sha, str) else None))
     known_tags = {item[1]: item[2] for item in candidates}
 
-    current = _parse_version(current_version)
+    current = parse_action_version(current_version)
     if current is not None:
         candidates = [item for item in candidates if item[0] > current]
     if maturity_period > 0:
         cutoff = time.time() - maturity_period * 24 * 60 * 60
-        mature_excluded = _exclude_versions(maturity_exclude_ranges)
+        mature_excluded = normalise_version_ranges(maturity_exclude_ranges)
         candidates = [
             item
             for item in candidates
@@ -144,10 +72,10 @@ def fetch_github_action_info(
             or not release_dates.get(item[1])
             or release_dates[item[1]] <= cutoff
         ]
-    included = _exclude_versions(include_ranges)
+    included = normalise_version_ranges(include_ranges)
     if included:
         candidates = [item for item in candidates if any(spec.contains(item[0], prereleases=True) for spec in included)]
-    excluded = _exclude_versions(exclude_ranges)
+    excluded = normalise_version_ranges(exclude_ranges)
     if excluded:
         candidates = [
             item for item in candidates if not any(spec.contains(item[0], prereleases=True) for spec in excluded)
@@ -189,6 +117,21 @@ def fetch_github_action_info(
         _release_date(release_dates.get(current_version or "")),
         best_sha,
     )
+
+
+def parse_action_version(value: str | None) -> Version | None:
+    """Parse a version tag supported by GitHub Actions references."""
+    if not value:
+        return None
+    value = value.lstrip("vV")
+    if not re.fullmatch(r"\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?", value):
+        return None
+    if re.fullmatch(r"\d+(?:\.\d+){0,1}", value):
+        value += ".0" * (3 - value.count(".") - 1)
+    try:
+        return Version(value)
+    except InvalidVersion:
+        return None
 
 
 def _request_tags(repo: str, *, timeout: float, retries: int) -> list[dict] | None:
@@ -262,86 +205,3 @@ def _github_token() -> str | None:
     except OSError, subprocess.SubprocessError:
         return None
     return result.stdout.strip() or None
-
-
-def _parse_version(value: str | None) -> Version | None:
-    if not value:
-        return None
-    value = value.lstrip("vV")
-    if not re.fullmatch(r"\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?", value):
-        return None
-    if re.fullmatch(r"\d+(?:\.\d+){0,1}", value):
-        value += ".0" * (3 - value.count(".") - 1)
-    try:
-        return Version(value)
-    except InvalidVersion:
-        return None
-
-
-def _version_tag(value: str) -> str:
-    return value if value.lower().startswith("v") else f"v{value}"
-
-
-def _exclude_versions(ranges: tuple[str, ...]):
-    from taze.pypi import normalise_version_ranges
-
-    return normalise_version_ranges(ranges)
-
-
-def write_action_updates(
-    path: Path,
-    infos: list[DepInfo],
-    *,
-    mode: str = "major",
-    style: str = "auto",
-    pin_unchanged: bool = False,
-) -> int:
-    """Update action refs in place while preserving YAML indentation/comments."""
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    except OSError, UnicodeError:
-        return 0
-    count = 0
-    for info in infos:
-        if info.line_number is None or not info.latest:
-            continue
-        effective = info.action_style if style == "auto" else style
-        # Even if already up to date, --github-actions-pin converts a tag pin
-        # to a SHA pin (pinact-style), since that's not a version bump to skip.
-        convert_only = pin_unchanged and effective == "sha" and info.action_style != "sha"
-        if not info.is_shown(mode) and not convert_only:
-            continue
-        index = info.line_number - 1
-        if not 0 <= index < len(lines):
-            continue
-        match = _ACTION_LINE.match(lines[index].rstrip("\r\n"))
-        if not match:
-            continue
-        if effective == "sha":
-            reference = info.action_target_sha
-            if not reference:
-                continue
-            comment = match.group("comment") or ""
-            if re.search(r"\bv\d", comment, re.IGNORECASE):
-                comment = re.sub(r"\bv\d[^\s#]*", info.latest, comment, count=1, flags=re.IGNORECASE)
-            else:
-                comment = f" # {info.latest}"
-        else:
-            reference = _preserve_granularity(info.current or "", info.latest)
-            comment = re.sub(r"\s+#\s*v\d[^\n]*", "", match.group("comment") or "", count=1, flags=re.IGNORECASE)
-        value = f"{info.action_repo}{info.action_subpath}@{reference}"
-        ending = lines[index][len(lines[index].rstrip("\r\n")) :]
-        lines[index] = (
-            f"{match.group('prefix')}{match.group('quote')}{value}{match.group('quote')}{comment or ''}{ending}"
-        )
-        count += 1
-    if count:
-        path.write_text("".join(lines), encoding="utf-8")
-    return count
-
-
-def _preserve_granularity(current: str, target: str) -> str:
-    current_parts = current.lstrip("vV").split(".")
-    target_parts = target.lstrip("vV").split(".")
-    count = min(max(len(current_parts), 1), len(target_parts))
-    return "v" + ".".join(target_parts[:count])

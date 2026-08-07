@@ -1,3 +1,5 @@
+"""Write dependency updates while preserving source formatting."""
+
 from __future__ import annotations
 
 import re

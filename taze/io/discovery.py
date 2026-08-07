@@ -1,4 +1,4 @@
-"""Project discovery helpers with workspace-aware exclusions."""
+"""Discover dependency files with workspace-aware exclusions."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from taze.installers import install_command
+from taze.io.installers import install_command
 
 
 class TestInstallCommand:

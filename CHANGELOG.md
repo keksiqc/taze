@@ -1,3 +1,13 @@
+## 0.4.0 (2026-08-07)
+
+### Feat
+
+- migrate config to pydantic
+
+### Refactor
+
+- organize package by responsibility
+
 ## 0.3.0 (2026-08-07)
 
 ### Feat

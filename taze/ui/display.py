@@ -1,3 +1,5 @@
+"""Render dependency updates in the terminal."""
+
 from __future__ import annotations
 
 import re

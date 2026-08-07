@@ -1,3 +1,5 @@
+"""Resolve package versions from PyPI."""
+
 from __future__ import annotations
 
 import json

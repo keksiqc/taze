@@ -1,4 +1,4 @@
-"""Select the dependency installer used by a Python project."""
+"""Select external install commands for Python projects."""
 
 from __future__ import annotations
 
