@@ -62,10 +62,10 @@ docstring-code-format = true
 indent-style = "space"
 quote-style = "double"
 
-[tool.uv.build-backend]
-module-name = "taze"
-module-root = ""
-
 [tool.taze]
 github_actions_pin = true
 github_actions_style = "sha"
+
+[tool.uv.build-backend]
+module-name = "taze"
+module-root = ""
