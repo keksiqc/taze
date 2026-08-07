@@ -4,7 +4,7 @@ import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, TypeVar, cast
+from typing import TYPE_CHECKING, Annotated, cast
 
 import typer
 from packaging.requirements import InvalidRequirement, Requirement
@@ -15,7 +15,7 @@ from rich.prompt import Confirm
 from taze import __version__
 from taze.actions import fetch_github_action_info, is_action_file, parse_actions, write_action_updates
 from taze.cache import load_cache, save_cache
-from taze.config import load_config, package_mode_for
+from taze.config import ConfigError, TazeConfig, load_config, package_mode_for, resolve_config
 from taze.discovery import discover_files
 from taze.display import console, interactive_select, render_file_header, render_group, render_json
 from taze.installers import install_command
@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-T = TypeVar("T")
 Entry = tuple[str, int | None] | tuple[str, int | None, dict[str, str]] | DepInfo
 
 
@@ -454,110 +453,96 @@ def main(
         console.print(f"taze/{__version__}")
         raise typer.Exit(0)
 
-    if mode not in MODES:
-        console.print(f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}")
-        raise typer.Exit(1)
+    # ── Load and merge configuration ────────────────────────────────────────
+    # Precedence: explicit CLI flag > taze.toml / [tool.taze] > CLI default.
+    root = (cwd or Path()).resolve()
+    config_path = (root / config).resolve() if config and not config.is_absolute() else config
+    try:
+        project_config = load_config(root, config_path)
+    except ConfigError as error:
+        console.print(f"[red]✗[/]  Invalid configuration: {error}")
+        raise typer.Exit(1) from error
 
-    if sort and sort not in SORT_CHOICES:
+    cli_config = TazeConfig(
+        mode=mode,
+        include=include,
+        exclude=exclude,
+        recursive=recursive,
+        ignore_paths=ignore_paths,
+        ignore_other_workspaces=ignore_other_workspaces,
+        interactive=interactive,
+        all_deps=all_deps,
+        group=group,
+        include_locked=include_locked,
+        maturity_period=maturity_period,
+        maturity_period_exclude=maturity_period_exclude,
+        sort=sort,
+        fail_on_outdated=fail_on_outdated,
+        silent=silent,
+        output_json=output_json,
+        github_actions=github_actions,
+        github_actions_style=github_actions_style,
+        github_actions_pin=github_actions_pin,
+        concurrency=concurrency,
+        request_timeout=request_timeout,
+        retries=retries,
+        write=write,
+        install=install,
+        update=update,
+        force=force,
+    )
+    cfg = resolve_config(context, cli_config, project_config)
+
+    # These three get mutated further below (install/-w prompts, pin-actions
+    # implying sha style), so they stay as plain locals; everything else is
+    # read straight off `cfg` from here on.
+    write = cfg.write
+    install = cfg.install
+    github_actions_style = cfg.github_actions_style
+
+    # ── Cross-field rules and validation ────────────────────────────────────
+    if cfg.mode not in MODES:
+        console.print(f"[red]✗[/]  Unknown mode [bold]{cfg.mode!r}[/]. Available: {' | '.join(MODES)}")
+        raise typer.Exit(1)
+    if cfg.sort and cfg.sort not in SORT_CHOICES:
         console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
         raise typer.Exit(1)
     if github_actions_style not in ("auto", "tag", "sha"):
         console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
         raise typer.Exit(1)
-    if concurrency < 1 or request_timeout <= 0 or retries < 0:
-        console.print("[red]✗[/]  concurrency and request timeout must be positive; retries cannot be negative")
+    if cfg.concurrency < 1 or cfg.request_timeout <= 0 or cfg.retries < 0 or cfg.maturity_period < 0:
+        console.print(
+            "[red]✗[/]  concurrency, timeout, and maturity-period must be positive; retries cannot be negative"
+        )
         raise typer.Exit(1)
 
-    if install or update:
+    if cfg.github_actions_pin and github_actions_style == "auto":
+        github_actions_style = "sha"
+    if install or cfg.update or cfg.github_actions_pin:
         write = True
 
-    pre = mode in PRE_RELEASE_MODES
+    pre = cfg.mode in PRE_RELEASE_MODES
 
-    root = (cwd or Path()).resolve()
-    config_path = (root / config).resolve() if config and not config.is_absolute() else config
-    project_config = load_config(root, config_path)
-    include = _configured(context, "include", include, project_config)
-    exclude = _configured(context, "exclude", exclude, project_config)
-    recursive = _configured(context, "recursive", recursive, project_config)
-    ignore_paths = _configured(context, "ignore_paths", ignore_paths, project_config)
-    ignore_other_workspaces = _configured(context, "ignore_other_workspaces", ignore_other_workspaces, project_config)
-    include_locked = _configured(context, "include_locked", include_locked, project_config)
-    concurrency = _configured(context, "concurrency", concurrency, project_config)
-    maturity_period = _configured(context, "maturity_period", maturity_period, project_config)
-    group = _configured(context, "group", group, project_config)
-    all_deps = _configured(context, "all", all_deps, project_config)
-    sort = _configured(context, "sort", sort, project_config)
-    force = _configured(context, "force", force, project_config)
-    request_timeout = _configured(context, "request_timeout", request_timeout, project_config)
-    retries = _configured(context, "retry", retries, project_config)
-    github_actions = _configured(context, "github_actions", github_actions, project_config)
-    github_actions_style = _configured(context, "github_actions_style", github_actions_style, project_config)
-    github_actions_pin = _configured(context, "github_actions_pin", github_actions_pin, project_config)
-    write = _configured(context, "write", write, project_config)
-    install = _configured(context, "install", install, project_config)
-    update = _configured(context, "update", update, project_config)
-    silent = _configured(context, "silent", silent, project_config)
-    fail_on_outdated = _configured(context, "fail_on_outdated", fail_on_outdated, project_config)
-    output_json = _configured(context, "output_json", output_json, project_config)
-    mode = _configured(context, "mode", mode, project_config)
-    interactive = _configured(context, "interactive", interactive, project_config)
-    maturity_period_exclude = _configured(
-        context,
-        "maturity_period_exclude",
-        maturity_period_exclude,
-        project_config,
-    )
-    package_modes = project_config.get("package_mode", {})
     try:
-        include_pat, include_selectors = parse_selectors(include)
-        exclude_pat, exclude_selectors = parse_selectors(exclude)
-        maturity_exclude_pat, maturity_exclude_selectors = parse_selectors(maturity_period_exclude)
+        include_pat, include_selectors = parse_selectors(cfg.include)
+        exclude_pat, exclude_selectors = parse_selectors(cfg.exclude)
+        maturity_exclude_pat, maturity_exclude_selectors = parse_selectors(cfg.maturity_period_exclude)
     except re.error as error:
         console.print(f"[red]✗[/]  Invalid dependency filter: {error}")
         raise typer.Exit(1) from error
-    if mode not in MODES:
-        console.print(f"[red]✗[/]  Unknown mode [bold]{mode!r}[/]. Available: {' | '.join(MODES)}")
-        raise typer.Exit(1)
-    pre = mode in PRE_RELEASE_MODES
-
-    if isinstance(retries, bool):
-        retries = 2 if retries else 0
-    if isinstance(github_actions, dict):
-        configured_style = github_actions.get("style")
-        if github_actions_style == "auto" and isinstance(configured_style, str):
-            github_actions_style = configured_style
-        github_actions = True
-    if github_actions_pin and github_actions_style == "auto":
-        github_actions_style = "sha"
-    if install or update or github_actions_pin:
-        write = True
-
-    if sort and sort not in SORT_CHOICES:
-        console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
-        raise typer.Exit(1)
-    try:
-        invalid_numbers = concurrency < 1 or request_timeout <= 0 or retries < 0 or maturity_period < 0
-    except TypeError:
-        invalid_numbers = True
-    if invalid_numbers:
-        console.print("[red]✗[/]  invalid concurrency, timeout, retry, or maturity-period value")
-        raise typer.Exit(1)
-    if github_actions_style not in ("auto", "tag", "sha"):
-        console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
-        raise typer.Exit(1)
 
     # ── Collect files ─────────────────────────────────────────────────────────
-    ignored = _path_patterns(ignore_paths)
+    ignored = _path_patterns(cfg.ignore_paths)
     target_files = discover_files(
         root,
-        recursive=recursive,
+        recursive=cfg.recursive,
         ignore_paths=ignored,
-        ignore_other_workspaces=ignore_other_workspaces,
-        github_actions=github_actions,
+        ignore_other_workspaces=cfg.ignore_other_workspaces,
+        github_actions=cfg.github_actions,
     )
 
     if not target_files:
-        if not silent:
+        if not cfg.silent:
             console.print(f"[red]✗[/]  No supported dependency files found in {root}")
         raise typer.Exit(1)
 
@@ -581,7 +566,7 @@ def main(
             try:
                 raw_groups = parse_pyproject_entries(file_path)
             except (AttributeError, OSError, TypeError, ValueError) as e:
-                if not silent:
+                if not cfg.silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
@@ -595,7 +580,7 @@ def main(
             try:
                 lines = file_path.read_text(encoding="utf-8").splitlines()
             except (OSError, UnicodeError) as e:
-                if not silent:
+                if not cfg.silent:
                     console.print(f"[red]✗[/]  Failed to parse {file_path}: {e}")
                 continue
             raw_file_groups[file_path] = {
@@ -612,7 +597,7 @@ def main(
     total_packages = sum(len(entries) for groups in raw_file_groups.values() for entries in groups.values())
 
     # ── Resolve registry metadata ────────────────────────────────────────────
-    registry_cache = load_cache(force=force)
+    registry_cache = load_cache(force=cfg.force)
     action_cache: dict[str, list[dict]] = {}
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
@@ -623,7 +608,7 @@ def main(
         TimeElapsedColumn(),
         console=console,
         transient=True,
-        disable=silent or output_json,
+        disable=cfg.silent or cfg.output_json,
     ) as progress:
         task_id = progress.add_task("checking", total=total_packages)
 
@@ -638,34 +623,34 @@ def main(
                     include_pat=include_pat,
                     exclude_pat=exclude_pat,
                     pre=pre,
-                    mode=mode,
-                    include_locked=include_locked,
-                    maturity_period=maturity_period,
+                    mode=cfg.mode,
+                    include_locked=cfg.include_locked,
+                    maturity_period=cfg.maturity_period,
                     maturity_exclude_pat=maturity_exclude_pat,
-                    package_modes=package_modes,
+                    package_modes=cfg.package_mode,
                     local_package_names=local_package_names,
-                    concurrency=concurrency,
+                    concurrency=cfg.concurrency,
                     on_progress=on_progress,
                     include_selectors=include_selectors,
                     exclude_selectors=exclude_selectors,
                     maturity_exclude_selectors=maturity_exclude_selectors,
                     cache=registry_cache,
                     action_cache=action_cache,
-                    force=force,
-                    request_timeout=request_timeout,
-                    retries=0 if no_retry else retries,
-                    interactive=interactive,
+                    force=cfg.force,
+                    request_timeout=cfg.request_timeout,
+                    retries=0 if no_retry else cfg.retries,
+                    interactive=cfg.interactive,
                     github_actions_style=github_actions_style,
                 )
 
     save_cache(registry_cache)
 
     # ── JSON output ───────────────────────────────────────────────────────────
-    if output_json:
+    if cfg.output_json:
         render_json(
             {str(fp): grps for fp, grps in resolved.items()},
-            mode=mode,
-            show_up_to_date=all_deps,
+            mode=cfg.mode,
+            show_up_to_date=cfg.all_deps,
         )
         if write:
             for file_path, groups in resolved.items():
@@ -673,29 +658,29 @@ def main(
                     write_action_updates(
                         file_path,
                         [info for infos in groups.values() for info in infos],
-                        mode=mode,
+                        mode=cfg.mode,
                         style=github_actions_style,
-                        pin_unchanged=github_actions_pin,
+                        pin_unchanged=cfg.github_actions_pin,
                     )
                 elif file_path.name == "pyproject.toml":
-                    write_pyproject_updates(file_path, groups, mode=mode)
+                    write_pyproject_updates(file_path, groups, mode=cfg.mode)
                 else:
                     write_requirements_updates(
                         file_path,
                         [info for infos in groups.values() for info in infos],
-                        mode=mode,
+                        mode=cfg.mode,
                     )
-        total_outdated = _count_outdated(resolved, mode)
-        raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
+        total_outdated = _count_outdated(resolved, cfg.mode)
+        raise typer.Exit(1 if (cfg.fail_on_outdated and total_outdated) else 0)
 
     # ── Interactive selection ─────────────────────────────────────────────────
-    total_outdated = _count_outdated(resolved, mode)
+    total_outdated = _count_outdated(resolved, cfg.mode)
     selected_for_update: set[int] | None = None  # None = all
 
     # --github-actions-pin can still have work to do (converting a tag pin to a SHA
     # pin) even when nothing is version-outdated, so it must bypass the
     # "nothing to update" early exit below.
-    has_pinnable_actions = github_actions_pin and any(
+    has_pinnable_actions = cfg.github_actions_pin and any(
         i.source == "github-actions"
         and i.action_target_sha
         and i.action_style != "sha"
@@ -720,16 +705,16 @@ def main(
             except ValueError:
                 file_labels[file_path] = str(file_path)
 
-    if interactive and not silent:
+    if cfg.interactive and not cfg.silent:
         interactive_categories: list[tuple[str, list[tuple[str, list[DepInfo]]]]] = []
         all_outdated: list[DepInfo] = []
         for file_path, groups in resolved.items():
             category_groups = (
-                groups.items() if group else [("dependencies", [i for infos in groups.values() for i in infos])]
+                groups.items() if cfg.group else [("dependencies", [i for infos in groups.values() for i in infos])]
             )
             file_groups: list[tuple[str, list[DepInfo]]] = []
             for label, infos in category_groups:
-                candidates = [i for i in infos if i.is_shown(mode) and not i.fetch_error]
+                candidates = [i for i in infos if i.is_shown(cfg.mode) and not i.fetch_error]
                 if candidates:
                     file_groups.append((label, candidates))
                     all_outdated.extend(candidates)
@@ -744,12 +729,12 @@ def main(
             raise typer.Exit(0)
 
     if total_outdated == 0 and not has_pinnable_actions:
-        if not silent:
+        if not cfg.silent:
             console.print("[green]dependencies are already up-to-date[/]")
         raise typer.Exit(0)
 
     # ── Rich display ──────────────────────────────────────────────────────────
-    if not silent:
+    if not cfg.silent:
         console.print()
 
     for file_path, groups in resolved.items():
@@ -759,9 +744,9 @@ def main(
             else {label: [i for i in infos if id(i) in selected_for_update] for label, infos in groups.items()}
         )
 
-        if not silent:
+        if not cfg.silent:
             all_infos = [i for infos in display_groups.values() for i in infos]
-            if not all_deps and not any(i.is_shown(mode) or i.fetch_error for i in all_infos):
+            if not cfg.all_deps and not any(i.is_shown(cfg.mode) or i.fetch_error for i in all_infos):
                 continue
 
             # Compute column widths across all groups in this file so every
@@ -776,24 +761,26 @@ def main(
                 max((len(i.latest_spec) for i in all_infos), default=0),
             )
 
-            console.print(render_file_header(file_labels[file_path], all_infos, mode))
+            console.print(render_file_header(file_labels[file_path], all_infos, cfg.mode))
             console.print()
 
             display_groups = (
-                display_groups if group else {"dependencies": [i for infos in display_groups.values() for i in infos]}
+                display_groups
+                if cfg.group
+                else {"dependencies": [i for infos in display_groups.values() for i in infos]}
             )
             for label, infos in display_groups.items():
                 if render_group(
                     label,
                     infos,
-                    mode=mode,
-                    show_up_to_date=all_deps,
-                    sort=sort,
+                    mode=cfg.mode,
+                    show_up_to_date=cfg.all_deps,
+                    sort=cfg.sort,
                     col_widths=col_widths,
                 ):
                     console.print()
 
-    if interactive and not silent and not write:
+    if cfg.interactive and not cfg.silent and not write:
         write = Confirm.ask("  [green]Write updates?[/]", default=True, console=console)
         console.print()
 
@@ -814,59 +801,59 @@ def main(
                 updated = write_action_updates(
                     file_path,
                     flat,
-                    mode=mode,
+                    mode=cfg.mode,
                     style=github_actions_style,
-                    pin_unchanged=github_actions_pin,
+                    pin_unchanged=cfg.github_actions_pin,
                 )
             elif file_path.name == "pyproject.toml":
-                updated = write_pyproject_updates(file_path, filtered, mode=mode)
+                updated = write_pyproject_updates(file_path, filtered, mode=cfg.mode)
             else:
                 flat = [i for infos in filtered.values() for i in infos]
-                updated = write_requirements_updates(file_path, flat, mode=mode)
+                updated = write_requirements_updates(file_path, flat, mode=cfg.mode)
 
             total_written += updated
-            if updated and not silent:
+            if updated and not cfg.silent:
                 console.print(f"  [green]✓[/]  Wrote [bold]{updated}[/] update(s) to [cyan]{file_path.name}[/]")
 
-        if total_written and not silent:
+        if total_written and not cfg.silent:
             console.print()
-            if not install and not update and not interactive:
+            if not install and not cfg.update and not cfg.interactive:
                 command_text = " ".join(
                     install_command(next((fp.parent for fp in resolved if fp.name == "pyproject.toml"), root))
                 )
                 console.print(f"  [dim]Run [cyan]{command_text}[/] to install the updates.[/]")
-        if total_written and interactive and not silent and not install and not update:
+        if total_written and cfg.interactive and not cfg.silent and not install and not cfg.update:
             install = Confirm.ask("  [green]Install now?[/]", default=True, console=console)
             console.print()
-    elif not silent:
+    elif not cfg.silent:
         console.print(f"  [dim]Run [cyan]taze -w[/] to write {total_outdated} update(s)[/]")
         console.print()
 
     # ── Lockfile-aware install ───────────────────────────────────────────────
-    if install or update:
+    if install or cfg.update:
         install_cwd = next(
             (fp.parent for fp in resolved if fp.name == "pyproject.toml"),
             root,
         )
         command = install_command(install_cwd)
         command_text = " ".join(command)
-        if not silent:
+        if not cfg.silent:
             console.print(f"  [dim]Running [cyan]{command_text}[/]…[/]")
         result = subprocess.run(
             command,
             cwd=install_cwd,
-            capture_output=silent,
+            capture_output=cfg.silent,
             check=False,
         )
         if result.returncode != 0:
-            if not silent:
+            if not cfg.silent:
                 console.print(f"[red]✗[/]  [bold]{command_text}[/] failed")
             raise typer.Exit(result.returncode)
-        if not silent:
+        if not cfg.silent:
             console.print(f"  [green]✓[/]  [bold]{command_text}[/] complete")
             console.print()
 
-    raise typer.Exit(1 if (fail_on_outdated and total_outdated) else 0)
+    raise typer.Exit(1 if (cfg.fail_on_outdated and total_outdated) else 0)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -874,17 +861,6 @@ def main(
 
 def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -> int:
     return sum(1 for groups in resolved.values() for infos in groups.values() for i in infos if i.is_shown(mode))
-
-
-def _configured[T](context: typer.Context, name: str, current: T, config: dict[str, object]) -> T:
-    """Use the project setting only when the corresponding CLI option was omitted."""
-    if name not in config:
-        return current
-    try:
-        source = context.get_parameter_source(name)
-    except AttributeError:
-        return current
-    return cast(T, config[name]) if source and source.name == "DEFAULT" else current
 
 
 def _path_patterns(value: object) -> tuple[str, ...]:
