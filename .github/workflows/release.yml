@@ -27,6 +27,8 @@ jobs:
 
       - name: Install commitizen
         uses: commitizen-tools/setup-cz@96c75e6ae9632047f2c9b4025b9dd1624b40de8f # v0.9.1
+        with:
+          python-version: "3.x"
 
       - name: Create changelog
         run: cz changelog --dry-run "${{ github.ref_name }}" > .changelog.md
