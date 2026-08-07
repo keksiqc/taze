@@ -37,6 +37,7 @@ CONFIG_KEYS = {
     "retry",
     "github_actions",
     "github_actions_style",
+    "github_actions_pin",
 }
 
 

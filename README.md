@@ -137,6 +137,8 @@ taze --json
                             Check workflow and composite-action references
       --github-actions-style <auto|tag|sha>
                             Preserve or choose action reference style
+      --github-actions-pin  Pin GitHub Actions to their commit SHA even if
+                            already up to date (implies sha style)
 ```
 
 ---

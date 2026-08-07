@@ -5,9 +5,9 @@ description = "🥬 Keep your Python deps fresh"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-  "packaging>=26.0",
-  "rich>=14.0.0",
-  "typer>=0.27.0",
+  "packaging>=26.3",
+  "rich>=15.0.0",
+  "typer>=0.27.1",
 ]
 
 [project.scripts]
@@ -17,9 +17,9 @@ taze = "taze.main:app"
 dev = [
   "commitizen>=4.17.0",
   "prek>=0.4.12",
-  "pytest>=9.1.0",
-  "ruff>=0.15.1",
-  "ty>=0.0.55",
+  "pytest>=9.1.1",
+  "ruff>=0.16.1",
+  "ty>=0.0.69",
 ]
 
 [build-system]
@@ -64,3 +64,7 @@ quote-style = "double"
 [tool.uv.build-backend]
 module-name = "taze"
 module-root = ""
+
+[tool.taze]
+github_actions_pin = true
+github_actions_style = "sha"

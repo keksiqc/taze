@@ -104,6 +104,7 @@ def fetch_github_action_info(
     retries: int = 2,
     cache: MutableMapping[str, list[dict]] | None = None,
     force: bool = False,
+    precise: bool = False,
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """Return the best version tag and commit SHA for an action repository."""
     key = f"github:{repo}"
@@ -164,10 +165,14 @@ def fetch_github_action_info(
             candidates = [item for item in candidates if item[0].major == current.major]
 
     if not candidates:
-        return current_version, None, None, None
+        # Nothing newer, but still report the current tag's SHA so callers can
+        # pin an already-up-to-date reference (e.g. --github-actions-pin).
+        return current_version, None, None, known_tags.get(current_version or "")
     best_version, best_tag, best_sha = max(candidates, key=lambda item: item[0])
     target_tag = best_tag
-    if current_version:
+    # A SHA-pinned write (pinact-style) wants the exact tag/commit, not the
+    # floating major tag matching the current pin's granularity.
+    if current_version and not precise:
         parts = current_version.lstrip("vV").split(".")
         desired_parts = [str(best_version.major)]
         if len(parts) >= 2:
@@ -289,6 +294,7 @@ def write_action_updates(
     *,
     mode: str = "major",
     style: str = "auto",
+    pin_unchanged: bool = False,
 ) -> int:
     """Update action refs in place while preserving YAML indentation/comments."""
     try:
@@ -297,7 +303,13 @@ def write_action_updates(
         return 0
     count = 0
     for info in infos:
-        if not info.is_shown(mode) or info.line_number is None or not info.latest:
+        if info.line_number is None or not info.latest:
+            continue
+        effective = info.action_style if style == "auto" else style
+        # Even if already up to date, --github-actions-pin converts a tag pin
+        # to a SHA pin (pinact-style), since that's not a version bump to skip.
+        convert_only = pin_unchanged and effective == "sha" and info.action_style != "sha"
+        if not info.is_shown(mode) and not convert_only:
             continue
         index = info.line_number - 1
         if not 0 <= index < len(lines):
@@ -305,7 +317,6 @@ def write_action_updates(
         match = _ACTION_LINE.match(lines[index].rstrip("\r\n"))
         if not match:
             continue
-        effective = info.action_style if style == "auto" else style
         if effective == "sha":
             reference = info.action_target_sha
             if not reference:

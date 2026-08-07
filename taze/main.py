@@ -76,6 +76,7 @@ def resolve_deps(
     request_timeout: float = 10.0,
     retries: int = 2,
     interactive: bool = False,
+    github_actions_style: str = "auto",
 ) -> list[DepInfo]:
     """Fetch registry metadata concurrently and return enriched dependencies."""
     include_selectors = include_selectors or []
@@ -129,6 +130,7 @@ def resolve_deps(
                 request_timeout=request_timeout,
                 retries=retries,
                 interactive=interactive,
+                github_actions_style=github_actions_style,
             ): i
             for i in infos
         }
@@ -168,8 +170,10 @@ def _fetch_info(
     request_timeout: float,
     retries: int,
     interactive: bool,
+    github_actions_style: str = "auto",
 ) -> tuple[str | None, str | None, str | None, str | None, tuple[str, ...]]:
     if info.source == "github-actions":
+        effective_style = info.action_style if github_actions_style == "auto" else github_actions_style
         version, latest_date, current_date, target_sha = fetch_github_action_info(
             info.action_repo or info.name,
             current_version=info.current,
@@ -183,6 +187,7 @@ def _fetch_info(
             retries=retries,
             cache=action_cache,
             force=force,
+            precise=effective_style == "sha",
         )
         return version, latest_date, current_date, target_sha, ()
     version, latest_date, current_date = fetch_pypi_info(
@@ -403,6 +408,13 @@ def main(
         str,
         typer.Option("--github-actions-style", help="Action write style: auto | tag | sha"),
     ] = "auto",
+    github_actions_pin: Annotated[
+        bool,
+        typer.Option(
+            "--github-actions-pin",
+            help="Pin GitHub Actions to their commit SHA even if already up to date (implies sha style)",
+        ),
+    ] = False,
     version: Annotated[
         bool,
         typer.Option("--version", "-v", help="Show version and exit", is_eager=True),
@@ -480,6 +492,7 @@ def main(
     retries = _configured(context, "retry", retries, project_config)
     github_actions = _configured(context, "github_actions", github_actions, project_config)
     github_actions_style = _configured(context, "github_actions_style", github_actions_style, project_config)
+    github_actions_pin = _configured(context, "github_actions_pin", github_actions_pin, project_config)
     write = _configured(context, "write", write, project_config)
     install = _configured(context, "install", install, project_config)
     update = _configured(context, "update", update, project_config)
@@ -514,7 +527,9 @@ def main(
         if github_actions_style == "auto" and isinstance(configured_style, str):
             github_actions_style = configured_style
         github_actions = True
-    if install or update:
+    if github_actions_pin and github_actions_style == "auto":
+        github_actions_style = "sha"
+    if install or update or github_actions_pin:
         write = True
 
     if sort and sort not in SORT_CHOICES:
@@ -640,6 +655,7 @@ def main(
                     request_timeout=request_timeout,
                     retries=0 if no_retry else retries,
                     interactive=interactive,
+                    github_actions_style=github_actions_style,
                 )
 
     save_cache(registry_cache)
@@ -659,6 +675,7 @@ def main(
                         [info for infos in groups.values() for info in infos],
                         mode=mode,
                         style=github_actions_style,
+                        pin_unchanged=github_actions_pin,
                     )
                 elif file_path.name == "pyproject.toml":
                     write_pyproject_updates(file_path, groups, mode=mode)
@@ -674,6 +691,19 @@ def main(
     # ── Interactive selection ─────────────────────────────────────────────────
     total_outdated = _count_outdated(resolved, mode)
     selected_for_update: set[int] | None = None  # None = all
+
+    # --github-actions-pin can still have work to do (converting a tag pin to a SHA
+    # pin) even when nothing is version-outdated, so it must bypass the
+    # "nothing to update" early exit below.
+    has_pinnable_actions = github_actions_pin and any(
+        i.source == "github-actions"
+        and i.action_target_sha
+        and i.action_style != "sha"
+        and (i.action_style if github_actions_style == "auto" else github_actions_style) == "sha"
+        for groups in resolved.values()
+        for infos in groups.values()
+        for i in infos
+    )
 
     # File labels double as headers, so disambiguate same-named files (e.g. a
     # recursive scan with several pyproject.toml) with their relative path.
@@ -713,7 +743,7 @@ def main(
             # A cancelled or fully-deselected picker isn't "up to date" — stay quiet.
             raise typer.Exit(0)
 
-    if total_outdated == 0:
+    if total_outdated == 0 and not has_pinnable_actions:
         if not silent:
             console.print("[green]dependencies are already up-to-date[/]")
         raise typer.Exit(0)
@@ -781,7 +811,13 @@ def main(
 
             if is_action_file(file_path):
                 flat = [i for infos in filtered.values() for i in infos]
-                updated = write_action_updates(file_path, flat, mode=mode, style=github_actions_style)
+                updated = write_action_updates(
+                    file_path,
+                    flat,
+                    mode=mode,
+                    style=github_actions_style,
+                    pin_unchanged=github_actions_pin,
+                )
             elif file_path.name == "pyproject.toml":
                 updated = write_pyproject_updates(file_path, filtered, mode=mode)
             else:
