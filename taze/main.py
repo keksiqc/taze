@@ -292,11 +292,7 @@ def main(
     mode: Annotated[
         str,
         typer.Argument(
-            help=(
-                "Update mode: "
-                "[green]patch[/] [yellow]minor[/] [red]major[/] "
-                "[dim]default | latest | stable | newest | next[/]"
-            ),
+            help=("Update mode: [dim]default | major | minor | patch | latest | newest | stable | next[/]"),
             show_default=False,
         ),
     ] = "default",
