@@ -194,23 +194,23 @@ packages and are not looked up on PyPI.
 ## Configuration
 
 Place options in `taze.toml` or in the `[tool.taze]` table of `pyproject.toml`.
-CLI values take precedence over project configuration.
+Precedence is CLI, environment variables, `taze.toml`, then `pyproject.toml`.
 
 ```toml
 [tool.taze]
 recursive = true
-ignore-paths = ["examples/**", "vendor/**"]
-maturity-period = 7
-maturity-period-exclude = "internal-tools"
-include-locked = false
+ignore_paths = ["examples/**", "vendor/**"]
+maturity_period = 7
+maturity_period_exclude = "internal-tools"
+include_locked = false
 
-[tool.taze.package-mode]
+[tool.taze.package_mode]
 django = "minor"
 "/pytest-.*/" = "patch"
 setuptools = "ignore"
 ```
 
-`package-mode` accepts every mode listed above, plus `ignore`. Exact package names,
+`package_mode` accepts every mode listed above, plus `ignore`. Exact package names,
 `*` globs, and slash-delimited regular expressions are supported. The cache lives
 at `$XDG_CACHE_HOME/taze/pypi.json` (or `~/.cache/taze/pypi.json`) for 30 minutes;
 `--force` bypasses it.

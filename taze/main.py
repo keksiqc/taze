@@ -433,7 +433,7 @@ def main(
         raise typer.Exit(0)
 
     # ── Load and merge configuration ────────────────────────────────────────
-    # Precedence: explicit CLI flag > taze.toml / [tool.taze] > CLI default.
+    # Precedence: explicit CLI flag > environment > taze.toml > pyproject.toml > CLI default.
     root = (cwd or Path()).resolve()
     config_path = (root / config).resolve() if config and not config.is_absolute() else config
     try:

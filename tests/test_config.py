@@ -5,12 +5,12 @@ from taze.config import load_config, package_mode_for
 
 class TestLoadConfig:
     def test_loads_taze_toml(self, tmp_path) -> None:
-        (tmp_path / "taze.toml").write_text('include = "httpx"\nconcurrency = 4\njson = true\nunknown = true\n')
+        (tmp_path / "taze.toml").write_text('include = "httpx"\nconcurrency = 4\noutput_json = true\nunknown = true\n')
         assert load_config(tmp_path) == {"include": "httpx", "concurrency": 4, "output_json": True}
 
     def test_loads_tool_table_from_pyproject(self, tmp_path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'demo'\n[tool.taze]\nignore-paths = ['examples/**']\ninclude-locked = true\n",
+            "[project]\nname = 'demo'\n[tool.taze]\nignore_paths = ['examples/**']\ninclude_locked = true\n",
         )
         assert load_config(tmp_path) == {"ignore_paths": ["examples/**"], "include_locked": True}
 
@@ -18,6 +18,11 @@ class TestLoadConfig:
         (tmp_path / "taze.toml").write_text('exclude = "pytest"\n')
         (tmp_path / "pyproject.toml").write_text("[tool.taze]\nexclude = 'ruff'\n")
         assert load_config(tmp_path) == {"exclude": "pytest"}
+
+    def test_prefers_environment_over_toml(self, tmp_path, monkeypatch) -> None:
+        (tmp_path / "taze.toml").write_text('include = "toml"\n')
+        monkeypatch.setenv("INCLUDE", "env")
+        assert load_config(tmp_path)["include"] == "env"
 
 
 class TestPackageMode:

@@ -68,8 +68,8 @@ indent-style = "space"
 quote-style = "double"
 
 [tool.taze]
-github-actions-pin = true
-github-actions-style = "sha"
+github_actions_pin = true
+github_actions_style = "sha"
 
 [tool.tombi.files]
 exclude = ["uv.lock"]
