@@ -66,6 +66,9 @@ quote-style = "double"
 github_actions_pin = true
 github_actions_style = "sha"
 
+[tool.tombi.files]
+exclude = ["uv.lock"]
+
 [tool.uv.build-backend]
 module-name = "taze"
 module-root = ""
