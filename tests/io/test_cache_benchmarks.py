@@ -1,4 +1,4 @@
-"""Benchmarks for the on-disk registry cache (orjson-backed load/save)."""
+"""Benchmarks for the on-disk registry cache (msgspec-backed load/save)."""
 
 from __future__ import annotations
 
