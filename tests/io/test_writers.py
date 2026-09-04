@@ -56,6 +56,30 @@ class TestWritePyprojectUpdates:
         assert write_pyproject_updates(p, {"poetry": [dep]}) == 1
         assert 'version = "^2.32"' in p.read_text()
 
+    def test_skips_poetry_dep_on_fetch_error(self, tmp_path) -> None:
+        p = self._write(
+            tmp_path,
+            """
+            [tool.poetry.dependencies]
+            requests = "^2.0"
+            """,
+        )
+        dep = DepInfo(
+            raw="requests",
+            name="requests",
+            current="2.0",
+            operator=None,
+            latest=None,
+            bump="?",
+            fetch_error=True,
+        )
+        dep.toml_section = "tool.poetry.dependencies"
+        dep.toml_key = "requests"
+        dep.toml_value = "^2.0"
+        count = write_pyproject_updates(p, {"poetry": [dep]})
+        assert count == 0
+        assert 'requests = "^2.0"' in p.read_text()
+
     def test_skips_up_to_date(self, tmp_path) -> None:
         p = self._write(
             tmp_path,
