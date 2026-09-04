@@ -19,7 +19,7 @@ def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]], *, 
 
     for infos in all_infos.values():
         for info in infos:
-            if not info.is_shown(mode):
+            if not info.is_shown(mode) or not info.latest:
                 continue
             if info.toml_section and info.toml_key and info.toml_value is not None:
                 new_value = _updated_toml_value(info)

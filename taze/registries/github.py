@@ -11,6 +11,7 @@ import urllib.request
 from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from urllib.error import URLError
+from urllib.parse import quote
 
 import orjson
 from packaging.version import InvalidVersion, Version
@@ -138,7 +139,7 @@ def _request_tags(repo: str, *, timeout: float, retries: int) -> list[dict] | No
     tags: list[dict] = []
     for page in range(1, 6):
         data = _request_json(
-            f"https://api.github.com/repos/{repo}/tags?per_page=100&page={page}",
+            f"https://api.github.com/repos/{quote(repo, safe='/')}/tags?per_page=100&page={page}",
             timeout=timeout,
             retries=retries,
         )
@@ -152,7 +153,7 @@ def _request_tags(repo: str, *, timeout: float, retries: int) -> list[dict] | No
 
 def _release_dates(repo: str, *, timeout: float, retries: int) -> dict[str, float]:
     data = _request_json(
-        f"https://api.github.com/repos/{repo}/releases?per_page=100",
+        f"https://api.github.com/repos/{quote(repo, safe='/')}/releases?per_page=100",
         timeout=timeout,
         retries=retries,
     )
