@@ -13,10 +13,33 @@ from datetime import UTC, datetime
 from urllib.error import URLError
 from urllib.parse import quote
 
-import orjson
+import msgspec
 from packaging.version import InvalidVersion, Version
 
 from taze.registries.pypi import normalise_version_ranges
+
+
+class _GithubCommit(msgspec.Struct):
+    sha: str | None = None
+
+
+class _GithubTag(msgspec.Struct):
+    """Schema for one entry of the GitHub ``/repos/{repo}/tags`` response."""
+
+    name: str | None = None
+    commit: _GithubCommit | None = None
+
+
+class _GithubRelease(msgspec.Struct):
+    """Schema for one entry of the GitHub ``/repos/{repo}/releases`` response."""
+
+    tag_name: str | None = None
+    published_at: str | None = None
+    created_at: str | None = None
+
+
+_TAGS_DECODER = msgspec.json.Decoder(list[_GithubTag], strict=False)
+_RELEASES_DECODER = msgspec.json.Decoder(list[_GithubRelease], strict=False)
 
 
 def fetch_github_action_info(
@@ -142,6 +165,7 @@ def _request_tags(repo: str, *, timeout: float, retries: int) -> list[dict] | No
             f"https://api.github.com/repos/{quote(repo, safe='/')}/tags?per_page=100&page={page}",
             timeout=timeout,
             retries=retries,
+            decoder=_TAGS_DECODER,
         )
         if not data:
             break
@@ -156,6 +180,7 @@ def _release_dates(repo: str, *, timeout: float, retries: int) -> dict[str, floa
         f"https://api.github.com/repos/{quote(repo, safe='/')}/releases?per_page=100",
         timeout=timeout,
         retries=retries,
+        decoder=_RELEASES_DECODER,
     )
     if not data:
         return {}
@@ -168,7 +193,7 @@ def _release_dates(repo: str, *, timeout: float, retries: int) -> dict[str, floa
             continue
         try:
             result[item["tag_name"]] = datetime.fromisoformat(published).timestamp()
-        except OverflowError, ValueError:
+        except (OverflowError, ValueError):
             continue
     return result
 
@@ -177,7 +202,7 @@ def _release_date(timestamp: float | None) -> str | None:
     return datetime.fromtimestamp(timestamp, tz=UTC).date().isoformat() if timestamp is not None else None
 
 
-def _request_json(url: str, *, timeout: float, retries: int) -> list[dict] | None:
+def _request_json(url: str, *, timeout: float, retries: int, decoder: msgspec.json.Decoder) -> list[dict] | None:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "taze"}
     token = _github_token()
     if token:
@@ -186,9 +211,9 @@ def _request_json(url: str, *, timeout: float, retries: int) -> list[dict] | Non
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                data = orjson.loads(response.read())
-            return data if isinstance(data, list) else None
-        except URLError, OSError, ValueError:
+                data = decoder.decode(response.read())
+            return msgspec.to_builtins(data)
+        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError):
             if attempt >= retries:
                 return None
             time.sleep(1.0 if attempt == 0 else 3.0)
@@ -203,6 +228,6 @@ def _github_token() -> str | None:
         return None
     try:
         result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=False, timeout=2)
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout.strip() or None

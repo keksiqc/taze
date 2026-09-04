@@ -97,7 +97,7 @@ def _poetry_requirement(name: str, value: object) -> tuple[str, str] | None:
             else:
                 upper = f"0.0.{int(version[2]) + 1 if len(version) > 2 else 1}"
             constraint = f">={lower},<{upper}"
-        except IndexError, ValueError:
+        except (IndexError, ValueError):
             return None
     elif constraint.startswith("~") and not constraint.startswith("~="):
         lower = constraint[1:]
@@ -108,7 +108,7 @@ def _poetry_requirement(name: str, value: object) -> tuple[str, str] | None:
             else:
                 upper = f"{int(parts[0])}.{int(parts[1]) + 1}"
             constraint = f">={lower},<{upper}"
-        except IndexError, ValueError:
+        except (IndexError, ValueError):
             return None
     elif re.fullmatch(r"v?\d+(?:\.\d+){0,2}", constraint):
         constraint = f"=={constraint.lstrip('v')}"

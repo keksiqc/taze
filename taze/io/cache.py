@@ -26,7 +26,7 @@ def load_cache(*, force: bool = False) -> dict[str, dict]:
             return {}
         data = orjson.loads(path.read_bytes())
         return data if isinstance(data, dict) else {}
-    except OSError, orjson.JSONDecodeError:
+    except (OSError, orjson.JSONDecodeError):
         return {}
 
 

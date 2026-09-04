@@ -110,7 +110,7 @@ def resolve_deps(
                 info.current_release_date = current_date
                 info.action_target_sha = target_sha
                 info.fetch_error = version is None
-            except AttributeError, OSError, TypeError, ValueError:
+            except (AttributeError, OSError, TypeError, ValueError):
                 info.fetch_error = True
             info.bump = calc_bump(info.current, info.latest)
             if on_progress is not None:
