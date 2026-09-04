@@ -82,7 +82,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
             continue
         try:
             name = parse_project_name(file_path)
-        except AttributeError, OSError, TypeError, ValueError:
+        except (AttributeError, OSError, TypeError, ValueError):
             name = None
         if name:
             local_package_names.add(name)

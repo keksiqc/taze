@@ -11,7 +11,7 @@ from collections.abc import MutableMapping
 from datetime import UTC, date, datetime
 from urllib.error import URLError
 
-import orjson
+import msgspec
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
@@ -20,6 +20,27 @@ from taze import __version__
 
 _USER_AGENT = f"taze/{__version__} (https://github.com/keksiqc/taze)"
 _RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts 1→2 and 2→3
+
+
+class _PypiFile(msgspec.Struct):
+    """The subset of a PyPI release file we read, decoded straight off the wire."""
+
+    requires_python: str | None = None
+    upload_time: str | None = None
+    upload_time_iso_8601: str | None = None
+    yanked: bool | None = None
+
+
+class _PypiInfo(msgspec.Struct):
+    version: str | None = None
+    requires_python: str | None = None
+
+
+class _PypiResponse(msgspec.Struct):
+    """Schema for PyPI's ``/pypi/<name>/json`` response (untrusted, network-sourced)."""
+
+    info: _PypiInfo = msgspec.field(default_factory=_PypiInfo)
+    releases: dict[str, list[_PypiFile] | None] = msgspec.field(default_factory=dict)
 
 
 def fetch_pypi_info(
@@ -146,9 +167,9 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = orjson.loads(resp.read())
-            return _slim(data) if isinstance(data, dict) else None
-        except URLError, OSError, ValueError:
+                parsed = msgspec.json.decode(resp.read(), type=_PypiResponse, strict=False)
+            return _slim(parsed)
+        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError):
             if attempt >= retries:
                 return None
             delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1] * 2 ** (attempt - 1)
@@ -156,7 +177,7 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
     return None
 
 
-def _slim(data: dict) -> dict:
+def _slim(data: _PypiResponse) -> dict:
     """Drop the per-file hashes/URLs/sizes PyPI's JSON API includes but we never read.
 
     A full response can run into the megabytes per package (every hash digest,
@@ -165,27 +186,22 @@ def _slim(data: dict) -> dict:
     cache. Keeping only the fields ``fetch_pypi_info`` actually consumes cuts
     that down by roughly an order of magnitude.
     """
-    info = data.get("info")
-    releases = data.get("releases")
-    slim_info = {
-        "version": info.get("version") if isinstance(info, dict) else None,
-        "requires_python": info.get("requires_python") if isinstance(info, dict) else None,
+    slim_releases: dict[str, list[dict]] = {
+        version: [
+            {
+                "requires_python": file.requires_python,
+                "upload_time": file.upload_time or file.upload_time_iso_8601,
+                "yanked": bool(file.yanked),
+            }
+            for file in files
+        ]
+        for version, files in data.releases.items()
+        if files
     }
-    slim_releases: dict[str, list[dict]] = {}
-    if isinstance(releases, dict):
-        for version, files in releases.items():
-            if not isinstance(files, list):
-                continue
-            slim_releases[version] = [
-                {
-                    "requires_python": file.get("requires_python"),
-                    "upload_time": file.get("upload_time") or file.get("upload_time_iso_8601"),
-                    "yanked": bool(file.get("yanked")),
-                }
-                for file in files
-                if isinstance(file, dict)
-            ]
-    return {"info": slim_info, "releases": slim_releases}
+    return {
+        "info": {"version": data.info.version, "requires_python": data.info.requires_python},
+        "releases": slim_releases,
+    }
 
 
 def normalise_version_ranges(ranges: tuple[str, ...] | list[str]) -> tuple[SpecifierSet, ...]:
