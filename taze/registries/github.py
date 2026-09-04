@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -13,6 +12,7 @@ from collections.abc import MutableMapping
 from datetime import UTC, datetime
 from urllib.error import URLError
 
+import orjson
 from packaging.version import InvalidVersion, Version
 
 from taze.registries.pypi import normalise_version_ranges
@@ -185,7 +185,7 @@ def _request_json(url: str, *, timeout: float, retries: int) -> list[dict] | Non
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                data = json.loads(response.read())
+                data = orjson.loads(response.read())
             return data if isinstance(data, list) else None
         except URLError, OSError, ValueError:
             if attempt >= retries:

@@ -10,6 +10,7 @@ classifiers = [
   "Environment :: Console",
 ]
 dependencies = [
+  "orjson>=3.12.0",
   "packaging>=26.3",
   "pydantic-settings[toml]>=2.15.0",
   "rich>=15.0.0",

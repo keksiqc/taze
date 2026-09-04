@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import time
@@ -12,6 +11,7 @@ from collections.abc import MutableMapping
 from datetime import UTC, date, datetime
 from urllib.error import URLError
 
+import orjson
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
@@ -146,7 +146,7 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
     for attempt in range(retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read())
+                data = orjson.loads(resp.read())
             return _slim(data) if isinstance(data, dict) else None
         except URLError, OSError, ValueError:
             if attempt >= retries:
