@@ -6,7 +6,7 @@ import os
 import time
 from pathlib import Path
 
-import orjson
+import msgspec
 
 
 TTL = 30 * 60
@@ -24,9 +24,9 @@ def load_cache(*, force: bool = False) -> dict[str, dict]:
     try:
         if time.time() - path.stat().st_mtime >= TTL:
             return {}
-        data = orjson.loads(path.read_bytes())
+        data = msgspec.json.decode(path.read_bytes())
         return data if isinstance(data, dict) else {}
-    except (OSError, orjson.JSONDecodeError):
+    except (OSError, msgspec.DecodeError):
         return {}
 
 
@@ -36,6 +36,6 @@ def save_cache(cache: dict[str, dict]) -> None:
     path = cache_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(orjson.dumps(cache))
+        path.write_bytes(msgspec.json.encode(cache))
     except OSError:
         pass
