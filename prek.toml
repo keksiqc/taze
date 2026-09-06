@@ -23,7 +23,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/commitizen-tools/commitizen"
-rev = "93c7b51d860138c34a0613756c0151209b88d56f"  # frozen: v4.17.0
+rev = "d910b66e2686a3ef6c3f438dec0f63ba3cf8d7ee"  # frozen: v4.18.0
 hooks = [
   { id = "commitizen" },
   { id = "commitizen-branch" },
@@ -31,21 +31,21 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "e805244dd1bc999f2b4d716f5fa21ee87189b084"  # frozen: 0.12.2
+rev = "7720020191168f707a43279c65b6bf9cdf7ed04e"  # frozen: 0.12.10
 hooks = [
   { id = "uv-lock" },
 ]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ty-pre-commit"
-rev = "a4405bd34b6505ed51226ba2a5b5428625177d6a"  # frozen: v0.0.69
+rev = "743d21e292f7a36ed70cc2318aa3c8711b1e0437"  # frozen: v0.0.78
 hooks = [
   { id = "ty" },
 ]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "39d9ac5938dadb73df0564a45f163e25ff9fa6e2"  # frozen: v0.16.1
+rev = "321478e58f4938179c6b86e4ddfa923d1547a49b"  # frozen: v0.16.6
 hooks = [
   { id = "ruff-format" },
   { id = "ruff-check", args = ["--fix"] },
@@ -53,7 +53,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/tombi-toml/tombi-pre-commit"
-rev = "385dc2ab8dbefe539be12c8e6bc3450e1276e87f"  # frozen: v1.2.7
+rev = "2ded3bc1d8379b49bfe7415ecea01f52a254c67d"  # frozen: v1.5.2
 hooks = [
   { id = "tombi-format" },
   { id = "tombi-lint" },

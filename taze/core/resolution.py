@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -20,7 +20,7 @@ Entry = tuple[str, int | None] | tuple[str, int | None, dict[str, str]] | DepInf
 
 
 def resolve_deps(
-    entries: list[Entry],
+    entries: Sequence[Entry],
     *,
     include_pat: re.Pattern[str] | None,
     exclude_pat: re.Pattern[str] | None,
