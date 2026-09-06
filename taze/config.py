@@ -77,7 +77,7 @@ def load_config(root: Path, config_path: Path | None = None) -> dict[str, Any]:
         merged.update(_read_toml_table(pyproject_file, ("tool", "taze")))
         merged.update(_read_toml_table(toml_file, toml_table_header))
         merged.update(_read_env())
-    except (OSError, tomllib.TOMLDecodeError):
+    except OSError, tomllib.TOMLDecodeError:
         return {}
 
     return {name: msgspec.convert(value, type=_FIELD_TYPES[name], strict=False) for name, value in merged.items()}
@@ -114,7 +114,7 @@ def _coerce_env_value(raw: str, annotation: Any) -> Any:
             continue
         try:
             return _coerce_env_value(raw, member)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return raw
 

@@ -26,7 +26,7 @@ def load_cache(*, force: bool = False) -> dict[str, dict]:
             return {}
         data = msgspec.json.decode(path.read_bytes())
         return data if isinstance(data, dict) else {}
-    except (OSError, msgspec.DecodeError):
+    except OSError, msgspec.DecodeError:
         return {}
 
 

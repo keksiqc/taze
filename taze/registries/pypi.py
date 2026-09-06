@@ -169,7 +169,7 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 parsed = msgspec.json.decode(resp.read(), type=_PypiResponse, strict=False)
             return _slim(parsed)
-        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError):
+        except URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError:
             if attempt >= retries:
                 return None
             delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1] * 2 ** (attempt - 1)

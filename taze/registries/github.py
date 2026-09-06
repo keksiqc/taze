@@ -193,7 +193,7 @@ def _release_dates(repo: str, *, timeout: float, retries: int) -> dict[str, floa
             continue
         try:
             result[item["tag_name"]] = datetime.fromisoformat(published).timestamp()
-        except (OverflowError, ValueError):
+        except OverflowError, ValueError:
             continue
     return result
 
@@ -213,7 +213,7 @@ def _request_json(url: str, *, timeout: float, retries: int, decoder: msgspec.js
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 data = decoder.decode(response.read())
             return msgspec.to_builtins(data)
-        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError):
+        except URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError:
             if attempt >= retries:
                 return None
             time.sleep(1.0 if attempt == 0 else 3.0)
@@ -228,6 +228,6 @@ def _github_token() -> str | None:
         return None
     try:
         result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=False, timeout=2)
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     return result.stdout.strip() or None
