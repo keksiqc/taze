@@ -384,7 +384,7 @@ wheels = [
 
 [[package]]
 name = "taze"
-version = "0.4.3"
+version = "0.4.4"
 source = { editable = "." }
 dependencies = [
     { name = "msgspec" },
