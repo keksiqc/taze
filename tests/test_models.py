@@ -64,6 +64,7 @@ class TestDepInfoProperties:
             ("==", "1.0.0", "2.0.0", "==2.0.0"),
             ("~=", "1.2.3", "1.3.0", "~=1.3.0"),
             ("~=", "1.2", "1.3.0", "~=1.3"),
+            (">", "1.0.0", "2.0.0", ">=2.0.0"),
             (None, None, None, "—"),
         ],
     )
@@ -100,6 +101,10 @@ class TestDepInfoProperties:
         d = self._make(raw=f"requests{operator}1.0.0", operator=operator, current="1.0.0", latest="2.0.0")
         assert d.updated_raw() == f"requests{operator}2.0.0"
 
+    def test_updated_raw_turns_exclusive_lower_bound_inclusive(self) -> None:
+        d = self._make(raw="httpx>1.0", operator=">", current="1.0", latest="2.1")
+        assert d.updated_raw() == "httpx>=2.1"
+
     def test_updated_raw_preserves_markers_and_other_bounds(self) -> None:
         d = self._make(
             raw='requests>=1.0,<2.0; python_version < "3.13"',
@@ -117,6 +122,18 @@ class TestDepInfoProperties:
             latest="0.35.0",
         )
         assert d.updated_raw() == "uvicorn[standard]>=0.35.0,<1"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("requests >= 1.0", "requests >= 2.0.0"),
+            ("requests>= 1.0", "requests>= 2.0.0"),
+            ("requests >=1.0, <3", "requests >=2.0.0, <3"),
+        ],
+    )
+    def test_updated_raw_preserves_whitespace_around_operator(self, raw, expected) -> None:
+        d = DepInfo(raw=raw, name="requests", current="1.0", operator=">=", latest="2.0.0")
+        assert d.updated_raw() == expected
 
     def test_updated_raw_no_operator(self) -> None:
         d = self._make(raw="requests", operator=None, current=None, latest="2.0.0")
