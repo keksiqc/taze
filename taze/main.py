@@ -10,7 +10,7 @@ import typer
 from taze import __version__
 from taze.config import ConfigError, TazeConfig, load_config, resolve_config
 from taze.core.runner import run
-from taze.ui.display import console
+from taze.ui.display import console, error_console
 
 
 app = typer.Typer(
@@ -173,7 +173,7 @@ def main(
     try:
         project_config = load_config(root, config_path)
     except ConfigError as error:
-        console.print(f"[red]✗[/]  Invalid configuration: {error}")
+        error_console.print(f"[red]✗[/]  Invalid configuration: {error}")
         raise typer.Exit(1) from error
 
     cli_config = TazeConfig(

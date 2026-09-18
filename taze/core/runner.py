@@ -20,7 +20,14 @@ from taze.io.installers import install_command
 from taze.io.parsers import parse_project_name, parse_pyproject_entries, parse_selectors
 from taze.io.writers import write_pyproject_updates, write_requirements_updates
 from taze.models import MODES, PRE_RELEASE_MODES, DepInfo
-from taze.ui.display import console, interactive_select, render_file_header, render_group, render_json
+from taze.ui.display import (
+    console,
+    error_console,
+    interactive_select,
+    render_file_header,
+    render_group,
+    render_json,
+)
 
 
 SORT_CHOICES = ("name-asc", "name-desc", "diff-asc", "diff-desc")
@@ -33,16 +40,16 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
     github_actions_style = cfg.github_actions_style
 
     if cfg.mode not in MODES:
-        console.print(f"[red]✗[/]  Unknown mode [bold]{cfg.mode!r}[/]. Available: {' | '.join(MODES)}")
+        error_console.print(f"[red]✗[/]  Unknown mode [bold]{cfg.mode!r}[/]. Available: {' | '.join(MODES)}")
         raise typer.Exit(1)
     if cfg.sort and cfg.sort not in SORT_CHOICES:
-        console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
+        error_console.print(f"[red]✗[/]  --sort must be one of: {', '.join(SORT_CHOICES)}")
         raise typer.Exit(1)
     if github_actions_style not in ("auto", "tag", "sha"):
-        console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
+        error_console.print("[red]✗[/]  --github-actions-style must be auto, tag, or sha")
         raise typer.Exit(1)
     if cfg.concurrency < 1 or cfg.request_timeout <= 0 or cfg.retries < 0 or cfg.maturity_period < 0:
-        console.print(
+        error_console.print(
             "[red]✗[/]  concurrency, timeout, and maturity-period must be positive; retries cannot be negative"
         )
         raise typer.Exit(1)
@@ -59,7 +66,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
         exclude_pat, exclude_selectors = parse_selectors(cfg.exclude)
         maturity_exclude_pat, maturity_exclude_selectors = parse_selectors(cfg.maturity_period_exclude)
     except re.error as error:
-        console.print(f"[red]✗[/]  Invalid dependency filter: {error}")
+        error_console.print(f"[red]✗[/]  Invalid dependency filter: {error}")
         raise typer.Exit(1) from error
 
     ignored = _path_patterns(cfg.ignore_paths)
@@ -73,7 +80,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
 
     if not target_files:
         if not cfg.silent:
-            console.print(f"[red]✗[/]  No supported dependency files found in {root}")
+            error_console.print(f"[red]✗[/]  No supported dependency files found in {root}")
         raise typer.Exit(1)
 
     local_package_names: set[str] = set()
@@ -94,7 +101,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
                 raw_groups = parse_pyproject_entries(file_path)
             except (AttributeError, OSError, TypeError, ValueError) as error:
                 if not cfg.silent:
-                    console.print(f"[red]✗[/]  Failed to parse {file_path}: {error}")
+                    error_console.print(f"[red]✗[/]  Failed to parse {file_path}: {error}")
                 continue
             raw_file_groups[file_path] = {
                 label: [(raw, None, metadata) for raw, metadata in entries] for label, entries in raw_groups.items()
@@ -108,7 +115,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
                 lines = file_path.read_text(encoding="utf-8").splitlines()
             except (OSError, UnicodeError) as error:
                 if not cfg.silent:
-                    console.print(f"[red]✗[/]  Failed to parse {file_path}: {error}")
+                    error_console.print(f"[red]✗[/]  Failed to parse {file_path}: {error}")
                 continue
             raw_file_groups[file_path] = {
                 "requirements": [
@@ -352,7 +359,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
         result = subprocess.run(command, cwd=install_cwd, capture_output=cfg.silent, check=False)
         if result.returncode != 0:
             if not cfg.silent:
-                console.print(f"[red]✗[/]  [bold]{command_text}[/] failed")
+                error_console.print(f"[red]✗[/]  [bold]{command_text}[/] failed")
             raise typer.Exit(result.returncode)
         if not cfg.silent:
             console.print(f"  [green]✓[/]  [bold]{command_text}[/] complete")

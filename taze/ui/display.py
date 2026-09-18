@@ -18,6 +18,8 @@ from taze.models import BUMP_COLOR, BUMP_ORDER, DepInfo, calc_bump
 
 
 console = Console()
+error_console = Console(stderr=True)
+"""Diagnostics go to stderr so ``--json`` output on stdout stays machine-readable."""
 
 
 def _age(release_date: str | None) -> tuple[str, str]:
