@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from taze.config import load_config, package_mode_for
+import pytest
+
+from taze.config import ConfigError, load_config, package_mode_for
 
 
 class TestLoadConfig:
@@ -24,6 +26,30 @@ class TestLoadConfig:
         (tmp_path / "taze.toml").write_text('include = "toml"\n')
         monkeypatch.setenv("TAZE_INCLUDE", "env")
         assert load_config(tmp_path)["include"] == "env"
+
+    def test_rejects_malformed_taze_toml(self, tmp_path) -> None:
+        (tmp_path / "taze.toml").write_text("concurrency = = 3\n")
+        with pytest.raises(ConfigError, match="taze.toml"):
+            load_config(tmp_path)
+
+    def test_rejects_malformed_pyproject(self, tmp_path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[tool.taze\n")
+        with pytest.raises(ConfigError, match="pyproject.toml"):
+            load_config(tmp_path)
+
+    def test_rejects_wrong_value_type(self, tmp_path) -> None:
+        (tmp_path / "taze.toml").write_text('concurrency = "many"\n')
+        with pytest.raises(ConfigError, match="concurrency"):
+            load_config(tmp_path)
+
+    def test_rejects_invalid_environment_value(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAZE_CONCURRENCY", "abc")
+        with pytest.raises(ConfigError, match="TAZE_CONCURRENCY"):
+            load_config(tmp_path)
+
+    def test_rejects_missing_explicit_config_file(self, tmp_path) -> None:
+        with pytest.raises(ConfigError, match="no such file"):
+            load_config(tmp_path, tmp_path / "missing.toml")
 
 
 class TestPackageMode:

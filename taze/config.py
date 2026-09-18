@@ -18,7 +18,8 @@ if TYPE_CHECKING:
     import typer
 
 
-ConfigError = msgspec.ValidationError
+class ConfigError(ValueError):
+    """Raised when a configuration file or ``TAZE_*`` variable cannot be used."""
 
 
 class TazeConfig(msgspec.Struct, frozen=True):
@@ -71,36 +72,66 @@ def load_config(root: Path, config_path: Path | None = None) -> dict[str, Any]:
     """
     toml_file = config_path or root / "taze.toml"
     pyproject_file = root / "pyproject.toml"
+    if config_path is not None and not config_path.is_file():
+        message = f"{config_path}: no such file"
+        raise ConfigError(message)
+
+    merged: dict[str, tuple[Any, str]] = {}
+    merged.update(_read_toml_table(pyproject_file, ("tool", "taze")))
+    merged.update(_read_toml_table(toml_file, _toml_table_header(toml_file)))
+    merged.update(_read_env())
+
+    result: dict[str, Any] = {}
+    for name, (value, origin) in merged.items():
+        try:
+            result[name] = msgspec.convert(value, type=_FIELD_TYPES[name], strict=False)
+        except msgspec.ValidationError as error:
+            message = f"{origin}: {name}: {error}"
+            raise ConfigError(message) from error
+    return result
+
+
+def _load_toml(path: Path) -> dict[str, Any]:
     try:
-        toml_table_header = _toml_table_header(toml_file)
-        merged: dict[str, Any] = {}
-        merged.update(_read_toml_table(pyproject_file, ("tool", "taze")))
-        merged.update(_read_toml_table(toml_file, toml_table_header))
-        merged.update(_read_env())
-    except OSError, tomllib.TOMLDecodeError:
-        return {}
+        with path.open("rb") as file:
+            return tomllib.load(file)
+    except tomllib.TOMLDecodeError as error:
+        message = f"{path}: {error}"
+        raise ConfigError(message) from error
+    except OSError as error:
+        message = f"{path}: {error.strerror or error}"
+        raise ConfigError(message) from error
 
-    return {name: msgspec.convert(value, type=_FIELD_TYPES[name], strict=False) for name, value in merged.items()}
 
-
-def _read_toml_table(path: Path, header: tuple[str, ...]) -> dict[str, Any]:
+def _read_toml_table(path: Path, header: tuple[str, ...]) -> dict[str, tuple[Any, str]]:
     if not path.is_file():
         return {}
-    with path.open("rb") as file:
-        data = tomllib.load(file)
-    table: Any = data
+    table: Any = _load_toml(path)
     for key in header:
         table = table.get(key, {}) if isinstance(table, dict) else {}
-    return {name: value for name, value in table.items() if name in _FIELD_TYPES} if isinstance(table, dict) else {}
+    if not isinstance(table, dict):
+        return {}
+    origin = f"{path}" + (f" [{'.'.join(header)}]" if header else "")
+    return {name: (value, origin) for name, value in table.items() if name in _FIELD_TYPES}
 
 
-def _read_env() -> dict[str, Any]:
-    result: dict[str, Any] = {}
+def _read_env() -> dict[str, tuple[Any, str]]:
+    result: dict[str, tuple[Any, str]] = {}
     for name, annotation in _FIELD_TYPES.items():
-        raw = os.environ.get(f"TAZE_{name.upper()}")
-        if raw is not None:
-            result[name] = _coerce_env_value(raw, annotation)
+        variable = f"TAZE_{name.upper()}"
+        raw = os.environ.get(variable)
+        if raw is None:
+            continue
+        try:
+            result[name] = (_coerce_env_value(raw, annotation), variable)
+        except TypeError, ValueError:
+            message = f"{variable}: cannot interpret {raw!r} as {_type_name(annotation)}"
+            raise ConfigError(message) from None
     return result
+
+
+def _type_name(annotation: Any) -> str:
+    return getattr(annotation, "__name__", None) or str(annotation).replace("typing.", "")
 
 
 def _coerce_env_value(raw: str, annotation: Any) -> Any:
@@ -122,8 +153,7 @@ def _coerce_env_value(raw: str, annotation: Any) -> Any:
 def _toml_table_header(path: Path) -> tuple[str, ...]:
     if not path.is_file():
         return ()
-    with path.open("rb") as file:
-        data = tomllib.load(file)
+    data = _load_toml(path)
     tool = data.get("tool")
     if isinstance(tool, dict) and isinstance(tool.get("taze"), dict):
         return ("tool", "taze")
