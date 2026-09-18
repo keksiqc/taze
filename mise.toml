@@ -7,16 +7,41 @@ uv_venv_auto = "create|source"
 [hooks]
 enter = "prek install"
 
-[tasks.test]
-description = "Run tests"
-run = "pytest"
-
-[tasks.check]
-description = "Run all checks"
+[tasks.fix]
+description = "Apply formatting and lint fixes"
 run = [
   "ruff format",
+  "ruff check --fix",
+]
+
+[tasks.check]
+description = "Verify formatting, linting, type checking, and tests"
+run = [
+  "ruff format --check",
   "ruff check",
   "ty check",
+  "pytest",
+]
+
+[tasks.test]
+description = "Run tests"
+run = [
+  "uv run --python=3.11 pytest",
+  "uv run --python=3.12 pytest",
+  "uv run --python=3.13 pytest",
+  "uv run --python=3.14 pytest",
+]
+
+[tasks.coverage]
+description = "Run tests and generate coverage report"
+run = [
+  "uv run --python=3.11 coverage run -m pytest",
+  "uv run --python=3.12 coverage run -m pytest",
+  "uv run --python=3.13 coverage run -m pytest",
+  "uv run --python=3.14 coverage run -m pytest",
+  "uv run coverage combine",
+  "uv run coverage report",
+  "uv run coverage html",
 ]
 
 [tasks.prek]
