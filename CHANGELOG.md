@@ -1,3 +1,30 @@
+## 0.5.0 (2026-09-18)
+
+### Feat
+
+- add parsing functions for pyproject and requirements files
+- add CodeQL workflow for security analysis
+- enhance CI workflow with improved linting, type checking, and coverage reporting
+- enhance cache handling with RegistryCache and improve load/save functionality
+- implement GitHub API rate limit handling and retry logic in registry clients
+- add support for parsing and handling requires-python in project files
+
+### Fix
+
+- correct variable reference for GITHUB_REF_NAME in release workflow
+- add missing authors field in pyproject.toml
+- correct requires-python version and update classifiers for compatibility
+- replace console with error_console for error messages in runner and main
+- improve error handling in configuration loading and add tests for malformed files
+- update operator handling in DepInfo for version rewriting
+
+### Refactor
+
+- remove outdated comment regarding YAML parser in parse_actions function
+- improve function naming and enhance file writing logic to prevent unnecessary rewrites
+- remove pytest-benchmark dependencies and related benchmarks
+- reorganize task definitions for clarity and enhance test coverage reporting
+
 ## 0.4.4 (2026-09-07)
 
 ### Fix
