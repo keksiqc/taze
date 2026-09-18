@@ -21,6 +21,7 @@ from taze.io.installers import install_command
 from taze.io.parsers import parse_project_name, parse_pyproject_entries, parse_requires_python, parse_selectors
 from taze.io.writers import write_pyproject_updates, write_requirements_updates
 from taze.models import MODES, PRE_RELEASE_MODES, DepInfo
+from taze.registries import github
 from taze.registries.pypi import minimum_python
 from taze.ui.display import (
     console,
@@ -183,6 +184,11 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
                 )
 
     save_cache(registry_cache)
+    if github.rate_limit_hit and not cfg.silent:
+        error_console.print(
+            "[yellow]![/]  GitHub API rate limit reached; set [cyan]GITHUB_TOKEN[/] or run [cyan]gh auth login[/] "
+            "to check actions."
+        )
 
     if cfg.output_json:
         render_json(

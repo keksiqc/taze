@@ -165,6 +165,43 @@ class TestFetchPypiInfo:
         assert call_count == 3
         assert mock_sleep.call_count == 2
 
+    def test_does_not_retry_unknown_package(self) -> None:
+        import io
+        from email.message import Message
+        from urllib.error import HTTPError
+
+        def not_found(request, timeout=None):
+            raise HTTPError(request.full_url, 404, "Not Found", Message(), io.BytesIO(b""))
+
+        with patch("urllib.request.urlopen", side_effect=not_found) as urlopen, patch("time.sleep") as mock_sleep:
+            result = fetch_pypi_info("definitely-not-a-package", retries=2)
+
+        assert result == (None, None, None)
+        assert urlopen.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_retries_server_errors_honouring_retry_after(self) -> None:
+        import io
+        from email.message import Message
+        from urllib.error import HTTPError
+
+        calls = 0
+
+        def flaky(request, timeout=None):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                headers = Message()
+                headers["Retry-After"] = "7"
+                raise HTTPError(request.full_url, 503, "Unavailable", headers, io.BytesIO(b""))
+            return _mock_urlopen(FAKE_DATA)
+
+        with patch("urllib.request.urlopen", side_effect=flaky), patch("time.sleep") as mock_sleep:
+            version, _, _ = fetch_pypi_info("requests", retries=2)
+
+        assert version == "2.0.0"
+        mock_sleep.assert_called_once_with(7.0)
+
 
 class TestUploadDate:
     def test_known_version(self) -> None:

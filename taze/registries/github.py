@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shutil
@@ -16,6 +17,7 @@ from urllib.parse import quote
 import msgspec
 from packaging.version import InvalidVersion, Version
 
+from taze.registries.http import is_rate_limited, retry_delay
 from taze.registries.pypi import normalise_version_ranges
 
 
@@ -37,6 +39,9 @@ class _GithubRelease(msgspec.Struct):
     published_at: str | None = None
     created_at: str | None = None
 
+
+rate_limit_hit = False
+"""Set once GitHub answers with an exhausted quota, so the CLI can suggest a token."""
 
 _TAGS_DECODER = msgspec.json.Decoder(list[_GithubTag], strict=False)
 _RELEASES_DECODER = msgspec.json.Decoder(list[_GithubRelease], strict=False)
@@ -213,17 +218,25 @@ def _request_json(url: str, *, timeout: float, retries: int, decoder: msgspec.js
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 data = decoder.decode(response.read())
             return msgspec.to_builtins(data)
-        except URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError:
-            if attempt >= retries:
+        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError) as error:
+            if is_rate_limited(error):
+                global rate_limit_hit
+                rate_limit_hit = True
                 return None
-            time.sleep(1.0 if attempt == 0 else 3.0)
+            delay = retry_delay(error, attempt)
+            if delay is None or attempt >= retries:
+                return None
+            time.sleep(delay)
     return None
 
 
 def _github_token() -> str | None:
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if token:
-        return token
+    return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or _gh_cli_token()
+
+
+@functools.cache
+def _gh_cli_token() -> str | None:
+    """Ask the ``gh`` CLI for a token once per process; it is spawned from every worker thread otherwise."""
     if not shutil.which("gh"):
         return None
     try:

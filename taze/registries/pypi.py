@@ -16,10 +16,10 @@ from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from taze import __version__
+from taze.registries.http import retry_delay
 
 
 _USER_AGENT = f"taze/{__version__} (https://github.com/keksiqc/taze)"
-_RETRY_DELAYS = (1.0, 3.0)  # seconds between attempts 1→2 and 2→3
 
 
 class _PypiFile(msgspec.Struct):
@@ -177,10 +177,10 @@ def _request(package: str, *, timeout: float, retries: int) -> dict | None:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 parsed = msgspec.json.decode(resp.read(), type=_PypiResponse, strict=False)
             return _slim(parsed)
-        except URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError:
-            if attempt >= retries:
+        except (URLError, OSError, ValueError, msgspec.DecodeError, msgspec.ValidationError) as error:
+            delay = retry_delay(error, attempt)
+            if delay is None or attempt >= retries:
                 return None
-            delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1] * 2 ** (attempt - 1)
             time.sleep(delay)
     return None
 
