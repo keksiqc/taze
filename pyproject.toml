@@ -30,7 +30,6 @@ dev = [
   "coverage>=7.16.1",
   "prek>=0.5.2",
   "pytest>=9.1.1",
-  "pytest-benchmark>=5.3.0",
   "ruff>=0.16.6",
   "ty>=0.0.78",
 ]
@@ -52,8 +51,6 @@ update_changelog_on_bump = true
 major_version_zero = true
 
 [tool.pytest.ini_options]
-# Benchmarks execute once as plain tests; pass --benchmark-enable to measure.
-addopts = ["--benchmark-disable"]
 cache_dir = ".cache/pytest"
 testpaths = ["tests"]
 
