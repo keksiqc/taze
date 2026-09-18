@@ -217,6 +217,36 @@ def _poetry_section(label: str) -> str:
     return f"tool.poetry.group.{label.split(':', 1)[1]}.dependencies"
 
 
+def parse_pyproject_deps(path: Path) -> dict[str, list[DepInfo]]:
+    """Return group_label → parsed dependencies from all recognised sections."""
+    groups: dict[str, list[DepInfo]] = {}
+    for label, entries in parse_pyproject_entries(path).items():
+        groups[label] = [
+            info
+            for raw, metadata in entries
+            if (
+                info := parse_dep_string(
+                    raw,
+                    toml_section=metadata.get("toml_section"),
+                    toml_key=metadata.get("toml_key"),
+                    toml_value=metadata.get("toml_value"),
+                )
+            )
+            is not None
+        ]
+    return groups
+
+
+def parse_requirements(path: Path) -> list[DepInfo]:
+    """Parse a ``requirements*.txt`` file, remembering each dependency's line number."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [
+        info
+        for line_number, line in enumerate(lines, 1)
+        if (info := parse_dep_string(line, line_number=line_number)) is not None
+    ]
+
+
 def parse_pyproject(path: Path) -> dict[str, list[str]]:
     """Return group_label → raw dep strings from all recognised sections."""
     return {label: [raw for raw, _metadata in entries] for label, entries in parse_pyproject_entries(path).items()}

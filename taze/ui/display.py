@@ -195,6 +195,40 @@ def render_group(
     return True
 
 
+def render_file(
+    label: str,
+    groups: dict[str, list[DepInfo]],
+    *,
+    mode: str,
+    show_up_to_date: bool,
+    sort: str | None,
+    grouped: bool = True,
+) -> bool:
+    """Render one file's header and dependency tables with columns aligned across groups.
+
+    Returns False without printing when nothing in the file needs showing.
+    """
+    infos = [info for group in groups.values() for info in group]
+    if not show_up_to_date and not any(info.is_shown(mode) or info.fetch_error for info in infos):
+        return False
+    col_widths = (
+        max((len(info.name) for info in infos), default=0),
+        max((len(info.current_spec) for info in infos), default=0),
+        max((len(_age(info.current_release_date)[0]) for info in infos), default=0),
+        max((len(_age(info.release_date)[0]) for info in infos), default=0),
+        max((len(info.latest_spec) for info in infos), default=0),
+    )
+    console.print(render_file_header(label, infos, mode))
+    console.print()
+    tables = groups if grouped else {"dependencies": infos}
+    for group_label, group_infos in tables.items():
+        if render_group(
+            group_label, group_infos, mode=mode, show_up_to_date=show_up_to_date, sort=sort, col_widths=col_widths
+        ):
+            console.print()
+    return True
+
+
 def _sort_infos(infos: list[DepInfo], sort: str) -> None:
     key = (lambda i: i.name) if sort.startswith("name") else lambda i: BUMP_ORDER.get(i.bump, -1)
     infos.sort(key=key, reverse=sort.endswith("desc"))

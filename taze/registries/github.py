@@ -11,6 +11,7 @@ import time
 import urllib.request
 from collections.abc import MutableMapping
 from datetime import UTC, datetime
+from typing import NamedTuple
 from urllib.error import URLError
 from urllib.parse import quote
 
@@ -40,6 +41,15 @@ class _GithubRelease(msgspec.Struct):
     created_at: str | None = None
 
 
+class ActionResolution(NamedTuple):
+    """Outcome of one GitHub Action lookup. ``latest`` is ``None`` when the request failed."""
+
+    latest: str | None
+    release_date: str | None
+    current_release_date: str | None
+    target_sha: str | None
+
+
 rate_limit_hit = False
 """Set once GitHub answers with an exhausted quota, so the CLI can suggest a token."""
 
@@ -62,14 +72,14 @@ def fetch_github_action_info(
     cache: MutableMapping[str, list[dict]] | None = None,
     force: bool = False,
     precise: bool = False,
-) -> tuple[str | None, str | None, str | None, str | None]:
+) -> ActionResolution:
     """Return the best version tag and commit SHA for an action repository."""
     key = f"github:{repo}"
     data = None if force else (cache.get(key) if cache else None)
     if data is None:
         data = _request_tags(repo, timeout=timeout, retries=max(0, retries))
         if data is None:
-            return None, None, None, None
+            return ActionResolution(None, None, None, None)
         if cache is not None:
             cache[key] = data
 
@@ -124,7 +134,7 @@ def fetch_github_action_info(
     if not candidates:
         # Nothing newer, but still report the current tag's SHA so callers can
         # pin an already-up-to-date reference (e.g. --github-actions-pin).
-        return current_version, None, None, known_tags.get(current_version or "")
+        return ActionResolution(current_version, None, None, known_tags.get(current_version or ""))
     best_version, best_tag, best_sha = max(candidates, key=lambda item: item[0])
     target_tag = best_tag
     # A SHA-pinned write (pinact-style) wants the exact tag/commit, not the
@@ -140,7 +150,7 @@ def fetch_github_action_info(
         if desired in known_tags:
             target_tag = desired
             best_sha = known_tags[desired] or best_sha
-    return (
+    return ActionResolution(
         target_tag,
         _release_date(release_dates.get(best_tag)),
         _release_date(release_dates.get(current_version or "")),

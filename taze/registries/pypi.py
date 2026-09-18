@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import MutableMapping
 from datetime import UTC, date, datetime
+from typing import NamedTuple
 from urllib.error import URLError
 
 import msgspec
@@ -43,6 +44,14 @@ class _PypiResponse(msgspec.Struct):
     releases: dict[str, list[_PypiFile] | None] = msgspec.field(default_factory=dict)
 
 
+class PypiResolution(NamedTuple):
+    """Outcome of one PyPI lookup. ``latest`` is ``None`` when the request failed."""
+
+    latest: str | None
+    release_date: str | None
+    current_release_date: str | None
+
+
 def fetch_pypi_info(
     package: str,
     *,
@@ -59,9 +68,9 @@ def fetch_pypi_info(
     cache: MutableMapping[str, dict] | None = None,
     force: bool = False,
     python_version: Version | None = None,
-) -> tuple[str | None, str | None, str | None]:
+) -> PypiResolution:
     """
-    Return ``(latest_version, latest_release_date, current_release_date)``.
+    Return the best version for ``package`` along with release dates.
 
     ``python_version`` is the interpreter the *project* targets (its
     ``requires-python`` lower bound). Releases whose ``requires_python``
@@ -75,17 +84,17 @@ def fetch_pypi_info(
     if data is None:
         data = _request(package, timeout=timeout, retries=max(0, retries))
         if data is None:
-            return None, None, None
+            return PypiResolution(None, None, None)
         if cache is not None:
             cache[package] = data
 
     if not isinstance(data, dict):
-        return None, None, None
+        return PypiResolution(None, None, None)
 
     info = data.get("info", {})
     releases = data.get("releases", {})
     if not isinstance(info, dict) or not isinstance(releases, dict):
-        return None, None, None
+        return PypiResolution(None, None, None)
 
     info_version = info.get("version", "") if isinstance(info.get("version", ""), str) else ""
     current_date = _upload_date(releases, current_version) if current_version else None
@@ -116,7 +125,7 @@ def fetch_pypi_info(
                 and (not current_version or _within_mode(version, _as_version(current_version), mode))
                 and (current is None or version > current)
             ):
-                return str(version), _upload_date(releases, info_version), current_date
+                return PypiResolution(str(version), _upload_date(releases, info_version), current_date)
         except InvalidVersion:
             pass
 
@@ -154,9 +163,9 @@ def fetch_pypi_info(
             best = version
 
     if best is None:
-        return current_version, current_date, current_date if current_version else None
+        return PypiResolution(current_version, current_date, current_date if current_version else None)
     best_string = str(best)
-    return best_string, _upload_date(releases, best_string), current_date
+    return PypiResolution(best_string, _upload_date(releases, best_string), current_date)
 
 
 def _cached(cache: MutableMapping[str, dict] | None, package: str) -> dict | None:

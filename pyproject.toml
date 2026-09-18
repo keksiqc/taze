@@ -52,6 +52,8 @@ update_changelog_on_bump = true
 major_version_zero = true
 
 [tool.pytest.ini_options]
+# Benchmarks execute once as plain tests; pass --benchmark-enable to measure.
+addopts = ["--benchmark-disable"]
 cache_dir = ".cache/pytest"
 testpaths = ["tests"]
 

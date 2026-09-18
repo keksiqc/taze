@@ -10,7 +10,9 @@ from taze.io.parsers import (
     parse_dep_string,
     parse_project_name,
     parse_pyproject,
+    parse_pyproject_deps,
     parse_pyproject_entries,
+    parse_requirements,
     parse_requires_python,
     parse_selectors,
     selector_ranges,
@@ -200,3 +202,19 @@ class TestParseRequiresPython:
         path = tmp_path / "pyproject.toml"
         path.write_text('[project]\nname = "demo"\n')
         assert parse_requires_python(path) is None
+
+
+class TestDepInfoParsers:
+    def test_parse_pyproject_deps_keeps_poetry_metadata(self, tmp_path) -> None:
+        p = tmp_path / "pyproject.toml"
+        p.write_text('[project]\ndependencies = ["requests>=2"]\n[tool.poetry.dependencies]\nhttpx = "^0.27"\n')
+        groups = parse_pyproject_deps(p)
+        assert [d.name for d in groups["dependencies"]] == ["requests"]
+        (httpx,) = groups["poetry"]
+        assert (httpx.toml_section, httpx.toml_key, httpx.toml_value) == ("tool.poetry.dependencies", "httpx", "^0.27")
+
+    def test_parse_requirements_records_line_numbers_and_skips_noise(self, tmp_path) -> None:
+        p = tmp_path / "requirements.txt"
+        p.write_text("# comment\n-r base.txt\n\nrequests>=2  # pinned\n\nhttpx>=1\n")
+        infos = parse_requirements(p)
+        assert [(d.name, d.line_number) for d in infos] == [("requests", 4), ("httpx", 6)]

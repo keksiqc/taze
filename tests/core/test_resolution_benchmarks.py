@@ -14,7 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from taze.core.resolution import resolve_deps
+from taze.core.resolution import ResolvePolicy, resolve_deps
+from taze.io.parsers import parse_dep_string
 from taze.registries.pypi import fetch_pypi_info
 
 
@@ -42,28 +43,15 @@ def _mock_response(data: dict) -> MagicMock:
     return ctx
 
 
-def _entries() -> list[tuple[str, int | None]]:
+def _entries() -> list:
     # A declared lower bound forces the range-aware scan of every release
     # instead of the info.version fast path, in both the cached and
     # uncached case, so the benchmark measures the same resolution work.
-    return [(f"pkg-{i}>=1.0.0", i) for i in range(PACKAGE_COUNT)]
+    return [info for i in range(PACKAGE_COUNT) if (info := parse_dep_string(f"pkg-{i}>=1.0.0", line_number=i))]
 
 
 def _resolve(cache: dict[str, dict] | None) -> list:
-    return resolve_deps(
-        _entries(),
-        include_pat=None,
-        exclude_pat=None,
-        pre=False,
-        mode="default",
-        include_locked=False,
-        maturity_period=0,
-        maturity_exclude_pat=None,
-        package_modes={},
-        local_package_names=set(),
-        concurrency=8,
-        cache=cache,
-    )
+    return resolve_deps(_entries(), ResolvePolicy(concurrency=8), cache=cache)
 
 
 class TestFetchPypiInfoBenchmark:
