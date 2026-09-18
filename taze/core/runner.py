@@ -6,6 +6,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 from packaging.version import Version
@@ -14,7 +15,7 @@ from rich.prompt import Confirm
 
 from taze.config import TazeConfig
 from taze.core.resolution import ResolvePolicy, resolve_deps
-from taze.io.actions import is_action_file, parse_actions, write_action_updates
+from taze.io.actions import is_action_file, is_pinnable, parse_actions, write_action_updates
 from taze.io.cache import load_cache, save_cache
 from taze.io.discovery import discover_files
 from taze.io.installers import install_command
@@ -289,13 +290,13 @@ def _install(directory: Path, *, silent: bool) -> None:
 # --- helpers ----------------------------------------------------------------
 
 
-def _fail(message: str, *, silent: bool = False, code: int = 1) -> typer.Exit:
+def _fail(message: str, *, silent: bool = False, code: int = 1) -> NoReturn:
     if not silent:
         error_console.print(f"[red]✗[/]  {message}")
     raise typer.Exit(code)
 
 
-def _exit(cfg: TazeConfig, total_outdated: int) -> typer.Exit:
+def _exit(cfg: TazeConfig, total_outdated: int) -> NoReturn:
     raise typer.Exit(1 if (cfg.fail_on_outdated and total_outdated) else 0)
 
 
@@ -308,14 +309,10 @@ def _count_outdated(resolved: Resolved, mode: str) -> int:
 
 
 def _has_pinnable_actions(resolved: Resolved, cfg: TazeConfig, options: RunOptions) -> bool:
-    """``--github-actions-pin`` converts up-to-date tag refs to SHAs, which is work even with nothing outdated."""
     if not cfg.github_actions_pin:
         return False
     return any(
-        info.source == "github-actions"
-        and info.action_target_sha
-        and info.action_style != "sha"
-        and (info.action_style if options.action_style == "auto" else options.action_style) == "sha"
+        info.action_target_sha and is_pinnable(info, options.action_style)
         for groups in resolved.values()
         for info in _flatten(groups)
     )

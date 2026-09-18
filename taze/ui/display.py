@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import select
 import shutil
@@ -415,8 +416,6 @@ def _draw_lines(lines: list[Text], previous: int) -> int:
 
 
 def _read_key(fd: int) -> str | None:
-    import os
-
     key = os.read(fd, 1)
     if not key:
         return "escape"

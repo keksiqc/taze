@@ -102,10 +102,7 @@ def write_action_updates(
         if info.line_number is None or not info.latest:
             continue
         effective = info.action_style if style == "auto" else style
-        # Even if already up to date, --github-actions-pin converts a tag pin
-        # to a SHA pin (pinact-style), since that's not a version bump to skip.
-        convert_only = pin_unchanged and effective == "sha" and info.action_style != "sha"
-        if not info.is_shown(mode) and not convert_only:
+        if not info.is_shown(mode) and not (pin_unchanged and is_pinnable(info, style)):
             continue
         index = info.line_number - 1
         if not 0 <= index < len(lines):
@@ -134,6 +131,16 @@ def write_action_updates(
     if count:
         path.write_text("".join(lines), encoding="utf-8")
     return count
+
+
+def is_pinnable(info: DepInfo, style: str) -> bool:
+    """Whether ``--github-actions-pin`` would convert this tag reference to a SHA.
+
+    That is worth doing even when the action is already up to date (pinact
+    style), so it is not a version bump the writer may skip.
+    """
+    effective = info.action_style if style == "auto" else style
+    return info.source == "github-actions" and effective == "sha" and info.action_style != "sha"
 
 
 def _preserve_granularity(current: str, target: str) -> str:

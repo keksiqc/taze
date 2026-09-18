@@ -168,7 +168,7 @@ def resolve_deps(
 
     with ThreadPoolExecutor(max_workers=max(1, policy.concurrency)) as pool:
         futures = {
-            pool.submit(fetch_resolution, info, policy, cache=cache, python_version=python_version): info
+            pool.submit(_fetch_resolution, info, policy, cache=cache, python_version=python_version): info
             for info in selected
         }
         for future in as_completed(futures):
@@ -184,7 +184,7 @@ def resolve_deps(
     return selected
 
 
-def fetch_resolution(
+def _fetch_resolution(
     info: DepInfo,
     policy: ResolvePolicy,
     *,

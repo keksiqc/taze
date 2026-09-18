@@ -193,3 +193,22 @@ class TestWriteRequirementsUpdates:
         count = write_requirements_updates(p, [dep], mode="minor")
         assert count == 0
         assert p.read_text().strip() == "requests>=2.0.0"
+
+
+class TestUnchangedFilesAreLeftAlone:
+    def test_pyproject_is_not_rewritten_without_updates(self, tmp_path: Path) -> None:
+        p = tmp_path / "pyproject.toml"
+        p.write_text('[project]\ndependencies = ["requests>=2.0"]\n')
+        before = p.stat().st_mtime_ns
+        dep = _dep("requests>=2.0", "requests", "2.0", "2.0", bump="same")
+        assert write_pyproject_updates(p, {"dependencies": [dep]}) == 0
+        assert p.stat().st_mtime_ns == before
+
+    def test_requirements_is_not_rewritten_without_updates(self, tmp_path: Path) -> None:
+        p = tmp_path / "requirements.txt"
+        p.write_text("requests>=2.0\n")
+        before = p.stat().st_mtime_ns
+        dep = _dep("requests>=2.0", "requests", "2.0", "2.0", bump="same")
+        dep.line_number = 1
+        assert write_requirements_updates(p, [dep]) == 0
+        assert p.stat().st_mtime_ns == before

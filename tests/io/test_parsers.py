@@ -9,7 +9,6 @@ from taze.io.parsers import (
     build_name_filter,
     parse_dep_string,
     parse_project_name,
-    parse_pyproject,
     parse_pyproject_deps,
     parse_pyproject_entries,
     parse_requirements,
@@ -45,6 +44,11 @@ def test_parse_dep_string(raw, name, current, operator) -> None:
 @pytest.mark.parametrize("raw", ["# this is a comment", "   ", "-r base.txt", "local @ file:///tmp/local"])
 def test_parse_dep_string_skips_non_dependencies(raw) -> None:
     assert parse_dep_string(raw) is None
+
+
+def parse_pyproject(path):
+    """Group label → raw requirement strings, the shape these tests assert on."""
+    return {label: [info.raw for info in infos] for label, infos in parse_pyproject_deps(path).items()}
 
 
 class TestParsePyproject:

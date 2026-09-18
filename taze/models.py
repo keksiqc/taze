@@ -23,12 +23,17 @@ PRE_RELEASE_MODES = {"newest", "next"}
 MODE_CEILING = {"minor": 2, "patch": 1}
 
 
+def pad_partial_version(value: str) -> str:
+    """Expand the partial ``v4`` / ``4.1`` tags used by actions to three components."""
+    value = value.strip().lstrip("vV")
+    if re.fullmatch(r"\d+(?:\.\d+)?", value):
+        value += ".0" * (2 - value.count("."))
+    return value
+
+
 def _version(value: str) -> Version:
     """Parse Python versions and the partial ``v4`` tags used by actions."""
-    value = value.strip().lstrip("vV")
-    if re.fullmatch(r"\d+(?:\.\d+){0,1}", value):
-        value += ".0" * (3 - value.count(".") - 1)
-    return Version(value)
+    return Version(pad_partial_version(value))
 
 
 def calc_bump(current: str | None, latest: str | None) -> str:

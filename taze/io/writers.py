@@ -44,7 +44,8 @@ def write_pyproject_updates(path: Path, all_infos: dict[str, list[DepInfo]], *, 
                     count += 1
                     break
 
-    path.write_text(content, encoding="utf-8")
+    if count:
+        path.write_text(content, encoding="utf-8")
     return count
 
 
@@ -110,5 +111,6 @@ def write_requirements_updates(path: Path, infos: list[DepInfo], *, mode: str = 
         lines[idx] = prefix + new_raw + comment + ending
         count += 1
 
-    path.write_text("".join(lines), encoding="utf-8")
+    if count:
+        path.write_text("".join(lines), encoding="utf-8")
     return count

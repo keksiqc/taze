@@ -247,11 +247,6 @@ def parse_requirements(path: Path) -> list[DepInfo]:
     ]
 
 
-def parse_pyproject(path: Path) -> dict[str, list[str]]:
-    """Return group_label → raw dep strings from all recognised sections."""
-    return {label: [raw for raw, _metadata in entries] for label, entries in parse_pyproject_entries(path).items()}
-
-
 def parse_project_name(path: Path) -> str | None:
     """Return a normalised PEP 621 project name, when one is declared."""
     with open(path, "rb") as f:

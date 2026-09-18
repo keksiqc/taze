@@ -18,6 +18,7 @@ from urllib.parse import quote
 import msgspec
 from packaging.version import InvalidVersion, Version
 
+from taze.models import pad_partial_version
 from taze.registries.http import is_rate_limited, retry_delay
 from taze.registries.pypi import normalise_version_ranges
 
@@ -165,10 +166,8 @@ def parse_action_version(value: str | None) -> Version | None:
     value = value.lstrip("vV")
     if not re.fullmatch(r"\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?", value):
         return None
-    if re.fullmatch(r"\d+(?:\.\d+){0,1}", value):
-        value += ".0" * (3 - value.count(".") - 1)
     try:
-        return Version(value)
+        return Version(pad_partial_version(value))
     except InvalidVersion:
         return None
 
