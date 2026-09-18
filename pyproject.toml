@@ -26,12 +26,12 @@ taze = "taze.main:app"
 
 [dependency-groups]
 dev = [
-  "commitizen>=4.18.0",
+  "commitizen>=4.18.1",
   "coverage>=7.16.1",
-  "prek>=0.5.2",
+  "prek>=0.5.3",
   "pytest>=9.1.1",
-  "ruff>=0.16.6",
-  "ty>=0.0.78",
+  "ruff>=0.16.8",
+  "ty>=0.0.82",
 ]
 
 [build-system]
