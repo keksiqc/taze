@@ -236,6 +236,22 @@ def parse_project_name(path: Path) -> str | None:
     return name.lower().replace("_", "-")
 
 
+def parse_requires_python(path: Path) -> str | None:
+    """Return the project's ``requires-python`` specifier (PEP 621 or Poetry), if declared."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    project = data.get("project", {})
+    value = project.get("requires-python") if isinstance(project, dict) else None
+    if not isinstance(value, str) or not value:
+        tool = data.get("tool", {})
+        poetry = tool.get("poetry", {}) if isinstance(tool, dict) else {}
+        deps = poetry.get("dependencies", {}) if isinstance(poetry, dict) else {}
+        value = deps.get("python") if isinstance(deps, dict) else None
+        if isinstance(value, str) and value.startswith("^"):
+            value = f">={value[1:]}"
+    return value if isinstance(value, str) and value else None
+
+
 def build_name_filter(pattern: str) -> re.Pattern[str] | None:
     """
     Build a compiled regex from a comma-separated list.

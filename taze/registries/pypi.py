@@ -58,9 +58,14 @@ def fetch_pypi_info(
     retries: int = 2,
     cache: MutableMapping[str, dict] | None = None,
     force: bool = False,
+    python_version: Version | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     """
     Return ``(latest_version, latest_release_date, current_release_date)``.
+
+    ``python_version`` is the interpreter the *project* targets (its
+    ``requires-python`` lower bound). Releases whose ``requires_python``
+    excludes it are skipped. Defaults to the interpreter running taze.
 
     ``cache`` is deliberately an optional raw-response mapping: callers that
     need a persistent cache can load/save it around a scan, while direct use
@@ -88,6 +93,7 @@ def fetch_pypi_info(
     included = normalise_version_ranges(include_ranges)
     maturity_excluded = normalise_version_ranges(maturity_exclude_ranges)
     current = _as_version(current_version)
+    python = python_version or _running_python()
 
     # The registry's ``info.version`` is sufficient only when no policy needs
     # to inspect release history. Range- and mode-aware resolution scans all
@@ -100,7 +106,7 @@ def fetch_pypi_info(
         and mode in ("major", "latest")
         and not pre
         and info_version
-        and _python_compatible(releases.get(info_version, []), info.get("requires_python"))
+        and _python_compatible(releases.get(info_version, []), info.get("requires_python"), python=python)
     ):
         try:
             version = Version(info_version)
@@ -126,7 +132,9 @@ def fetch_pypi_info(
             continue
         if not pre and (version.is_prerelease or version.is_devrelease):
             continue
-        if not _python_compatible(files, info.get("requires_python") if version_string == info_version else None):
+        if not _python_compatible(
+            files, info.get("requires_python") if version_string == info_version else None, python=python
+        ):
             continue
         if included and not _version_in_ranges(version, included):
             continue
@@ -264,11 +272,38 @@ def _version_in_ranges(version: Version, ranges: tuple[SpecifierSet, ...]) -> bo
     return any(specifier.contains(version, prereleases=True) for specifier in ranges)
 
 
-def _python_compatible(files: object, fallback: object = None) -> bool:
-    """Reject releases that cannot run on the interpreter doing the check."""
+def _running_python() -> Version:
+    return Version(".".join(str(part) for part in sys.version_info[:3]))
+
+
+def minimum_python(requirement: str | None) -> Version | None:
+    """Return the lowest Python a ``requires-python`` specifier admits, if it states one.
+
+    Only lower-bound style operators are considered: ``>=3.10``, ``~=3.10``,
+    ``==3.10.*``, ``>3.9``. A bare upper bound such as ``<4`` gives ``None``.
+    """
+    if not requirement:
+        return None
+    try:
+        specifiers = SpecifierSet(requirement)
+    except InvalidSpecifier:
+        return None
+    candidates: list[Version] = []
+    for spec in specifiers:
+        if spec.operator not in (">=", ">", "~=", "==", "==="):
+            continue
+        try:
+            candidates.append(Version(spec.version.rstrip("*").rstrip(".")))
+        except InvalidVersion:
+            continue
+    return min(candidates, default=None)
+
+
+def _python_compatible(files: object, fallback: object = None, *, python: Version | None = None) -> bool:
+    """Reject releases that cannot run on the Python the project targets."""
+    current = python or _running_python()
     if not isinstance(files, list):
-        return _python_requirement_compatible(fallback)
-    current = Version(".".join(str(part) for part in sys.version_info[:3]))
+        return _python_requirement_compatible(fallback, current)
     requirements: list[str] = []
     unconstrained = False
     for file in files:
@@ -280,7 +315,7 @@ def _python_compatible(files: object, fallback: object = None) -> bool:
         elif isinstance(requirement, str):
             requirements.append(requirement)
     if not requirements:
-        return _python_requirement_compatible(fallback) if fallback else True
+        return _python_requirement_compatible(fallback, current) if fallback else True
     return unconstrained or any(_python_requirement_compatible(requirement, current) for requirement in requirements)
 
 
@@ -288,7 +323,7 @@ def _python_requirement_compatible(requirement: object, current: Version | None 
     if not isinstance(requirement, str) or not requirement:
         return True
     try:
-        version = current or Version(".".join(str(part) for part in sys.version_info[:3]))
+        version = current or _running_python()
         return SpecifierSet(requirement).contains(version, prereleases=True)
     except InvalidSpecifier:
         return True

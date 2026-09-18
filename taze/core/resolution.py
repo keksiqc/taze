@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 from taze.config import package_mode_for
 from taze.io.parsers import parse_dep_string, selector_ranges
@@ -43,6 +44,7 @@ def resolve_deps(
     retries: int = 2,
     interactive: bool = False,
     github_actions_style: str = "auto",
+    python_version: Version | None = None,
 ) -> list[DepInfo]:
     """Fetch registry metadata concurrently and return enriched dependencies."""
     include_selectors = include_selectors or []
@@ -97,6 +99,7 @@ def resolve_deps(
                 retries=retries,
                 interactive=interactive,
                 github_actions_style=github_actions_style,
+                python_version=python_version,
             ): info
             for info in infos
         }
@@ -137,6 +140,7 @@ def _fetch_info(
     retries: int,
     interactive: bool,
     github_actions_style: str = "auto",
+    python_version: Version | None = None,
 ) -> tuple[str | None, str | None, str | None, str | None, tuple[str, ...]]:
     if info.source == "github-actions":
         effective_style = info.action_style if github_actions_style == "auto" else github_actions_style
@@ -170,6 +174,7 @@ def _fetch_info(
         retries=retries,
         cache=cache,
         force=force,
+        python_version=python_version,
     )
     return (
         version,
@@ -189,6 +194,7 @@ def _fetch_info(
             cache=cache,
             request_timeout=request_timeout,
             retries=retries,
+            python_version=python_version,
         )
         if interactive
         else (),
@@ -219,6 +225,7 @@ def _interactive_versions(
     cache: dict[str, dict] | None,
     request_timeout: float,
     retries: int,
+    python_version: Version | None = None,
 ) -> tuple[str, ...]:
     """Get the same patch/minor/latest choices exposed by the JS selector."""
     if cache is None:
@@ -241,6 +248,7 @@ def _interactive_versions(
             retries=retries,
             cache=cache,
             force=False,
+            python_version=python_version,
         )
         if version and version not in choices and version != info.current:
             choices.append(version)

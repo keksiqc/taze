@@ -4,9 +4,11 @@ import json
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
 from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
-from taze.registries.pypi import _is_mature, _upload_date, fetch_pypi_info
+from taze.registries.pypi import _is_mature, _upload_date, fetch_pypi_info, minimum_python
 
 
 FAKE_RELEASES = {
@@ -111,6 +113,19 @@ class TestFetchPypiInfo:
         version, _, _ = self._fetch(data=data)
         assert version == "1.0.0"
 
+    def test_uses_project_python_instead_of_interpreter(self) -> None:
+        data = {
+            "info": {"version": "2.0.0", "requires_python": ">=3.12"},
+            "releases": {
+                "1.0.0": [{"upload_time": "2024-01-01T00:00:00", "requires_python": ">=3.9"}],
+                "2.0.0": [{"upload_time": "2024-01-01T00:00:00", "requires_python": ">=3.12"}],
+            },
+        }
+        version, _, _ = self._fetch(data=data, python_version=Version("3.10"))
+        assert version == "1.0.0"
+        version, _, _ = self._fetch(data=data, python_version=Version("3.12"))
+        assert version == "2.0.0"
+
     def test_returns_release_date(self) -> None:
         _, latest_date, _ = self._fetch()
         assert latest_date == "2024-03-10"
@@ -173,3 +188,20 @@ class TestMaturity:
     def test_recent_release(self) -> None:
         files = [{"upload_time": "2024-01-01T00:00:00"}]
         assert _is_mature(files, 8, today=date(2024, 1, 8)) is False
+
+
+@pytest.mark.parametrize(
+    ("requirement", "expected"),
+    [
+        (">=3.10", "3.10"),
+        (">=3.10,<4", "3.10"),
+        ("~=3.11", "3.11"),
+        ("==3.12.*", "3.12"),
+        ("<4", None),
+        ("", None),
+        (None, None),
+        ("not a spec", None),
+    ],
+)
+def test_minimum_python(requirement, expected) -> None:
+    assert minimum_python(requirement) == (Version(expected) if expected else None)

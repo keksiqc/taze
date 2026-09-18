@@ -11,6 +11,7 @@ from taze.io.parsers import (
     parse_project_name,
     parse_pyproject,
     parse_pyproject_entries,
+    parse_requires_python,
     parse_selectors,
     selector_ranges,
 )
@@ -182,3 +183,20 @@ class TestBuildNameFilter:
         pattern, selectors = parse_selectors("requests@2")
         assert pattern is None
         assert selector_ranges("requests", selectors) == ("2",)
+
+
+class TestParseRequiresPython:
+    def test_reads_pep_621(self, tmp_path) -> None:
+        path = tmp_path / "pyproject.toml"
+        path.write_text('[project]\nname = "demo"\nrequires-python = ">=3.10"\n')
+        assert parse_requires_python(path) == ">=3.10"
+
+    def test_reads_poetry_caret(self, tmp_path) -> None:
+        path = tmp_path / "pyproject.toml"
+        path.write_text('[tool.poetry.dependencies]\npython = "^3.9"\n')
+        assert parse_requires_python(path) == ">=3.9"
+
+    def test_none_when_absent(self, tmp_path) -> None:
+        path = tmp_path / "pyproject.toml"
+        path.write_text('[project]\nname = "demo"\n')
+        assert parse_requires_python(path) is None

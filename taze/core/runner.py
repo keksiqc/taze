@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 import typer
+from packaging.version import Version
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm
 
@@ -17,9 +18,10 @@ from taze.io.actions import is_action_file, parse_actions, write_action_updates
 from taze.io.cache import load_cache, save_cache
 from taze.io.discovery import discover_files
 from taze.io.installers import install_command
-from taze.io.parsers import parse_project_name, parse_pyproject_entries, parse_selectors
+from taze.io.parsers import parse_project_name, parse_pyproject_entries, parse_requires_python, parse_selectors
 from taze.io.writers import write_pyproject_updates, write_requirements_updates
 from taze.models import MODES, PRE_RELEASE_MODES, DepInfo
+from taze.registries.pypi import minimum_python
 from taze.ui.display import (
     console,
     error_console,
@@ -84,15 +86,19 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
         raise typer.Exit(1)
 
     local_package_names: set[str] = set()
+    project_pythons: dict[Path, Version] = {}
     for file_path in target_files:
         if file_path.name != "pyproject.toml":
             continue
         try:
             name = parse_project_name(file_path)
+            python = minimum_python(parse_requires_python(file_path))
         except AttributeError, OSError, TypeError, ValueError:
-            name = None
+            name, python = None, None
         if name:
             local_package_names.add(name)
+        if python:
+            project_pythons[file_path.parent] = python
 
     raw_file_groups: dict[Path, dict[str, list[Entry]]] = {}
     for file_path in target_files:
@@ -173,6 +179,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
                     retries=0 if no_retry else cfg.retries,
                     interactive=cfg.interactive,
                     github_actions_style=github_actions_style,
+                    python_version=_project_python(file_path, project_pythons),
                 )
 
     save_cache(registry_cache)
@@ -366,6 +373,14 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
             console.print()
 
     raise typer.Exit(1 if (cfg.fail_on_outdated and total_outdated) else 0)
+
+
+def _project_python(file_path: Path, project_pythons: dict[Path, Version]) -> Version | None:
+    """Find the ``requires-python`` floor of the nearest enclosing project, if any."""
+    for directory in (file_path.parent, *file_path.parent.parents):
+        if directory in project_pythons:
+            return project_pythons[directory]
+    return None
 
 
 def _count_outdated(resolved: dict[Path, dict[str, list[DepInfo]]], mode: str) -> int:
