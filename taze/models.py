@@ -100,7 +100,12 @@ class DepInfo:
             n = len(self.current.split(".")) if self.current else 2
             parts = self.latest.split(".")[:n]
             return f"~={'.'.join(parts)}"
-        return f"{self.operator}{self.latest}"
+        return f"{self.write_operator}{self.latest}"
+
+    @property
+    def write_operator(self) -> str | None:
+        """Operator used when rewriting: an exclusive ``>`` must become ``>=`` so the new version is allowed."""
+        return ">=" if self.operator == ">" else self.operator
 
     @property
     def is_outdated(self) -> bool:
@@ -139,6 +144,9 @@ class DepInfo:
         # Rewrite precisely the specifier we selected as the baseline. This
         # preserves markers, extras, upper bounds and comments in PEP 508
         # declarations instead of reserialising only the parsed name/specs.
-        old = f"{self.operator}{self.current}"
-        pattern = re.compile(rf"{re.escape(old)}(?![A-Za-z0-9_.!-])")
-        return pattern.sub(f"{self.operator}{version}", self.raw, count=1)
+        # PEP 508 allows whitespace around the operator ("requests >= 2.0"),
+        # so match it loosely but keep whatever spacing the author used.
+        pattern = re.compile(
+            rf"(?P<operator>{re.escape(self.operator)})(?P<gap>\s*){re.escape(self.current)}(?![A-Za-z0-9_.!-])"
+        )
+        return pattern.sub(lambda m: f"{self.write_operator}{m.group('gap')}{version}", self.raw, count=1)
