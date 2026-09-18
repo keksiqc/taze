@@ -40,7 +40,7 @@ def _retry_after(value: str | None) -> float | None:
         pass
     try:
         delta = parsedate_to_datetime(value).timestamp() - time.time()
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return None
     return max(0.0, delta)
 

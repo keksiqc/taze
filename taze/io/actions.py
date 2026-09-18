@@ -31,7 +31,7 @@ def parse_actions(path: Path) -> list[DepInfo]:
     # flow-style or folded ``uses`` values need to be supported.
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         return []
 
     result: list[DepInfo] = []
@@ -95,7 +95,7 @@ def write_action_updates(
     """Update action refs in place while preserving YAML indentation/comments."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         return 0
     count = 0
     for info in infos:

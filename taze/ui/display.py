@@ -242,7 +242,7 @@ def interactive_select(
         return _interactive_numbers(outdated)
     try:
         return _interactive_menu(outdated, categories)
-    except ImportError, OSError, ValueError:
+    except (ImportError, OSError, ValueError):
         return _interactive_numbers(outdated)
 
 
@@ -266,7 +266,7 @@ def _interactive_numbers(outdated: list[DepInfo]) -> list[DepInfo]:
 
     try:
         raw = input().strip()
-    except EOFError, KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt):
         console.print()
         return []
 

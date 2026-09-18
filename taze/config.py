@@ -124,7 +124,7 @@ def _read_env() -> dict[str, tuple[Any, str]]:
             continue
         try:
             result[name] = (_coerce_env_value(raw, annotation), variable)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             message = f"{variable}: cannot interpret {raw!r} as {_type_name(annotation)}"
             raise ConfigError(message) from None
     return result
@@ -145,7 +145,7 @@ def _coerce_env_value(raw: str, annotation: Any) -> Any:
             continue
         try:
             return _coerce_env_value(raw, member)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
     return raw
 

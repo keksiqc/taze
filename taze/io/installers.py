@@ -34,5 +34,5 @@ def _uses_tool(project_dir: Path, tool: str) -> bool:
             data = tomllib.load(f)
         tools = data.get("tool", {})
         return isinstance(tools, dict) and tool in tools
-    except OSError, tomllib.TOMLDecodeError, TypeError:
+    except (OSError, tomllib.TOMLDecodeError, TypeError):
         return False

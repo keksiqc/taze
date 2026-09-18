@@ -43,7 +43,7 @@ def load_cache(*, force: bool = False, ttl: float = TTL) -> RegistryCache:
     try:
         file_time = path.stat().st_mtime
         data = msgspec.json.decode(path.read_bytes())
-    except OSError, msgspec.DecodeError:
+    except (OSError, msgspec.DecodeError):
         return RegistryCache()
     if not isinstance(data, dict):
         return RegistryCache()

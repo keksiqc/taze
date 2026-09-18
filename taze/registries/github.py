@@ -198,7 +198,7 @@ def _release_dates(repo: str, *, timeout: float, retries: int) -> dict[str, floa
             continue
         try:
             result[item["tag_name"]] = datetime.fromisoformat(published).timestamp()
-        except OverflowError, ValueError:
+        except (OverflowError, ValueError):
             continue
     return result
 
@@ -241,6 +241,6 @@ def _gh_cli_token() -> str | None:
         return None
     try:
         result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=False, timeout=2)
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout.strip() or None

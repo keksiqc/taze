@@ -94,7 +94,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
         try:
             name = parse_project_name(file_path)
             python = minimum_python(parse_requires_python(file_path))
-        except AttributeError, OSError, TypeError, ValueError:
+        except (AttributeError, OSError, TypeError, ValueError):
             name, python = None, None
         if name:
             local_package_names.add(name)
