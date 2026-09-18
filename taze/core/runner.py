@@ -137,7 +137,6 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
 
     total_packages = sum(len(entries) for groups in raw_file_groups.values() for entries in groups.values())
     registry_cache = load_cache(force=cfg.force)
-    action_cache: dict[str, list[dict]] = {}
     resolved: dict[Path, dict[str, list[DepInfo]]] = {}
 
     with Progress(
@@ -174,7 +173,7 @@ def run(root: Path, cfg: TazeConfig, *, no_retry: bool = False) -> None:
                     exclude_selectors=exclude_selectors,
                     maturity_exclude_selectors=maturity_exclude_selectors,
                     cache=registry_cache,
-                    action_cache=action_cache,
+                    action_cache=registry_cache,
                     force=cfg.force,
                     request_timeout=cfg.request_timeout,
                     retries=0 if no_retry else cfg.retries,

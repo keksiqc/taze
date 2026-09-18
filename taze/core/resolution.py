@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, MutableMapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -37,8 +37,8 @@ def resolve_deps(
     include_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
     exclude_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
     maturity_exclude_selectors: list[tuple[re.Pattern[str], tuple[str, ...]]] | None = None,
-    cache: dict[str, dict] | None = None,
-    action_cache: dict[str, list[dict]] | None = None,
+    cache: MutableMapping[str, dict] | None = None,
+    action_cache: MutableMapping[str, list[dict]] | None = None,
     force: bool = False,
     request_timeout: float = 10.0,
     retries: int = 2,
@@ -133,8 +133,8 @@ def _fetch_info(
     maturity_exclude_ranges: tuple[str, ...],
     exclude_ranges: tuple[str, ...],
     include_ranges: tuple[str, ...],
-    cache: dict[str, dict] | None,
-    action_cache: dict[str, list[dict]] | None,
+    cache: MutableMapping[str, dict] | None,
+    action_cache: MutableMapping[str, list[dict]] | None,
     force: bool,
     request_timeout: float,
     retries: int,
@@ -222,7 +222,7 @@ def _interactive_versions(
     maturity_exclude_ranges: tuple[str, ...],
     exclude_ranges: tuple[str, ...],
     include_ranges: tuple[str, ...],
-    cache: dict[str, dict] | None,
+    cache: MutableMapping[str, dict] | None,
     request_timeout: float,
     retries: int,
     python_version: Version | None = None,

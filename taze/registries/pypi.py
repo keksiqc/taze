@@ -163,8 +163,6 @@ def _cached(cache: MutableMapping[str, dict] | None, package: str) -> dict | Non
     if cache is None:
         return None
     data = cache.get(package)
-    if isinstance(data, dict) and "data" in data and isinstance(data["data"], dict):
-        return data["data"]
     return data if isinstance(data, dict) else None
 
 
