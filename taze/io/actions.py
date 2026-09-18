@@ -27,8 +27,6 @@ def is_action_file(path: Path) -> bool:
 
 def parse_actions(path: Path) -> list[DepInfo]:
     """Parse versioned ``uses:`` entries without reserialising the YAML file."""
-    # ponytail: line parser preserves YAML formatting; use a YAML parser if
-    # flow-style or folded ``uses`` values need to be supported.
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError):
