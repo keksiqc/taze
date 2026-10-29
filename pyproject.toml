@@ -15,10 +15,10 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "msgspec>=0.21.1",
+  "msgspec>=0.22.0",
   "packaging>=26.3",
   "rich>=15.0.0",
-  "typer>=0.27.2",
+  "typer>=0.27.3",
 ]
 
 [project.scripts]
@@ -26,16 +26,16 @@ taze = "taze.main:app"
 
 [dependency-groups]
 dev = [
-  "commitizen>=4.18.1",
-  "coverage>=7.16.1",
-  "prek>=0.5.3",
-  "pytest>=9.1.1",
-  "ruff>=0.16.8",
-  "ty>=0.0.82",
+  "commitizen>=4.19.3",
+  "coverage>=7.17.0",
+  "prek>=0.5.7",
+  "pytest>=9.2.0",
+  "ruff>=0.17.3",
+  "ty>=0.0.94",
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.0,<0.13"]
+requires = ["uv_build>=0.13.0,<0.14"]
 build-backend = "uv_build"
 
 [tool.commitizen]
